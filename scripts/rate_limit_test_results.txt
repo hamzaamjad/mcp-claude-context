@@ -1,0 +1,408 @@
+Claude.ai API Rate Limiting and Session Tests\n============================================================\nTest Date: 2025-06-30 22:20:00\n\n\nRATE_LIMITING TEST\n----------------------------------------\nTotal Requests: 50\nSuccessful: 50\nFailed: 0\nTotal Time: 17.38s\nRequests/Second: 2.88\n\nResponse Times:\n  Average: 0.243s\n  Min: 0.087s\n  Max: 2.677s\n\nFirst 10 failed requests:\n\nMALFORMED_SESSION TEST\n----------------------------------------\n\nTest Results:\n  empty_session: Status 403 - HTTP 403: Forbidden\n  invalid_format: Status 403 - HTTP 403: Forbidden\n  truncated: Status 403 - HTTP 403: Forbidden\n  wrong_prefix: Status 403 - HTTP 403: Forbidden\n  expired_format: Status 403 - HTTP 403: Forbidden\n\n============================================================\n\nFull results saved in JSON format at the end of this file.\n\n--- JSON DATA ---\n[
+  {
+    "test": "rate_limiting",
+    "stats": {
+      "total_requests": 50,
+      "successful_requests": 50,
+      "failed_requests": 0,
+      "total_time": 17.377010107040405,
+      "requests_per_second": 2.8773649604854743,
+      "errors_by_code": {},
+      "avg_response_time": 0.24307904720306397,
+      "min_response_time": 0.08668088912963867,
+      "max_response_time": 2.676935911178589
+    },
+    "results": [
+      {
+        "request_num": 1,
+        "status_code": 200,
+        "elapsed_time": 0.13863110542297363,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:40.359511"
+      },
+      {
+        "request_num": 2,
+        "status_code": 200,
+        "elapsed_time": 0.11398720741271973,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:40.578621"
+      },
+      {
+        "request_num": 3,
+        "status_code": 200,
+        "elapsed_time": 0.12096405029296875,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:40.804701"
+      },
+      {
+        "request_num": 4,
+        "status_code": 200,
+        "elapsed_time": 0.22480320930480957,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:41.133239"
+      },
+      {
+        "request_num": 5,
+        "status_code": 200,
+        "elapsed_time": 0.3831357955932617,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:41.621519"
+      },
+      {
+        "request_num": 6,
+        "status_code": 200,
+        "elapsed_time": 0.11580419540405273,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:41.842449"
+      },
+      {
+        "request_num": 7,
+        "status_code": 200,
+        "elapsed_time": 0.11317205429077148,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:42.060748"
+      },
+      {
+        "request_num": 8,
+        "status_code": 200,
+        "elapsed_time": 0.10141205787658691,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:42.267281"
+      },
+      {
+        "request_num": 9,
+        "status_code": 200,
+        "elapsed_time": 0.09433603286743164,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:42.463517"
+      },
+      {
+        "request_num": 10,
+        "status_code": 200,
+        "elapsed_time": 0.5869839191436768,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:43.155638"
+      },
+      {
+        "request_num": 11,
+        "status_code": 200,
+        "elapsed_time": 0.11377978324890137,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:43.374511"
+      },
+      {
+        "request_num": 12,
+        "status_code": 200,
+        "elapsed_time": 0.1254100799560547,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:43.605025"
+      },
+      {
+        "request_num": 13,
+        "status_code": 200,
+        "elapsed_time": 0.3470900058746338,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:44.057213"
+      },
+      {
+        "request_num": 14,
+        "status_code": 200,
+        "elapsed_time": 0.10476899147033691,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:44.267094"
+      },
+      {
+        "request_num": 15,
+        "status_code": 200,
+        "elapsed_time": 0.12306499481201172,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:44.493153"
+      },
+      {
+        "request_num": 16,
+        "status_code": 200,
+        "elapsed_time": 0.09577703475952148,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:44.689190"
+      },
+      {
+        "request_num": 17,
+        "status_code": 200,
+        "elapsed_time": 1.1590611934661865,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:45.953366"
+      },
+      {
+        "request_num": 18,
+        "status_code": 200,
+        "elapsed_time": 0.08668088912963867,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:46.140863"
+      },
+      {
+        "request_num": 19,
+        "status_code": 200,
+        "elapsed_time": 0.10973000526428223,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:46.355672"
+      },
+      {
+        "request_num": 20,
+        "status_code": 200,
+        "elapsed_time": 0.1311960220336914,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:46.591985"
+      },
+      {
+        "request_num": 21,
+        "status_code": 200,
+        "elapsed_time": 0.12765192985534668,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:46.824750"
+      },
+      {
+        "request_num": 22,
+        "status_code": 200,
+        "elapsed_time": 0.10336899757385254,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:47.033231"
+      },
+      {
+        "request_num": 23,
+        "status_code": 200,
+        "elapsed_time": 0.10500192642211914,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:47.242994"
+      },
+      {
+        "request_num": 24,
+        "status_code": 200,
+        "elapsed_time": 0.10102701187133789,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:47.449162"
+      },
+      {
+        "request_num": 25,
+        "status_code": 200,
+        "elapsed_time": 0.09341120719909668,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:47.647688"
+      },
+      {
+        "request_num": 26,
+        "status_code": 200,
+        "elapsed_time": 0.1282658576965332,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:47.881079"
+      },
+      {
+        "request_num": 27,
+        "status_code": 200,
+        "elapsed_time": 0.11255216598510742,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:48.098753"
+      },
+      {
+        "request_num": 28,
+        "status_code": 200,
+        "elapsed_time": 0.6906318664550781,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:48.890888"
+      },
+      {
+        "request_num": 29,
+        "status_code": 200,
+        "elapsed_time": 0.10428428649902344,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:49.100274"
+      },
+      {
+        "request_num": 30,
+        "status_code": 200,
+        "elapsed_time": 0.10606884956359863,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:49.311458"
+      },
+      {
+        "request_num": 31,
+        "status_code": 200,
+        "elapsed_time": 1.2152211666107178,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:50.631803"
+      },
+      {
+        "request_num": 32,
+        "status_code": 200,
+        "elapsed_time": 0.10943102836608887,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:50.842629"
+      },
+      {
+        "request_num": 33,
+        "status_code": 200,
+        "elapsed_time": 0.11494898796081543,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:51.062692"
+      },
+      {
+        "request_num": 34,
+        "status_code": 200,
+        "elapsed_time": 0.10546207427978516,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:51.268974"
+      },
+      {
+        "request_num": 35,
+        "status_code": 200,
+        "elapsed_time": 0.11759710311889648,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:51.490845"
+      },
+      {
+        "request_num": 36,
+        "status_code": 200,
+        "elapsed_time": 0.23961496353149414,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:51.835594"
+      },
+      {
+        "request_num": 37,
+        "status_code": 200,
+        "elapsed_time": 0.12408614158630371,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:52.064268"
+      },
+      {
+        "request_num": 38,
+        "status_code": 200,
+        "elapsed_time": 0.15045595169067383,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:52.319856"
+      },
+      {
+        "request_num": 39,
+        "status_code": 200,
+        "elapsed_time": 0.10069918632507324,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:52.524424"
+      },
+      {
+        "request_num": 40,
+        "status_code": 200,
+        "elapsed_time": 0.10563993453979492,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:52.735193"
+      },
+      {
+        "request_num": 41,
+        "status_code": 200,
+        "elapsed_time": 0.13132286071777344,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:52.971651"
+      },
+      {
+        "request_num": 42,
+        "status_code": 200,
+        "elapsed_time": 0.10994982719421387,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:53.186708"
+      },
+      {
+        "request_num": 43,
+        "status_code": 200,
+        "elapsed_time": 0.10620307922363281,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:53.398032"
+      },
+      {
+        "request_num": 44,
+        "status_code": 200,
+        "elapsed_time": 0.10502290725708008,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:53.608181"
+      },
+      {
+        "request_num": 45,
+        "status_code": 200,
+        "elapsed_time": 0.12938714027404785,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:53.842726"
+      },
+      {
+        "request_num": 46,
+        "status_code": 200,
+        "elapsed_time": 0.09681200981140137,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:54.041965"
+      },
+      {
+        "request_num": 47,
+        "status_code": 200,
+        "elapsed_time": 0.1037590503692627,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:54.250884"
+      },
+      {
+        "request_num": 48,
+        "status_code": 200,
+        "elapsed_time": 0.12339210510253906,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:54.479464"
+      },
+      {
+        "request_num": 49,
+        "status_code": 200,
+        "elapsed_time": 0.12595820426940918,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:54.710592"
+      },
+      {
+        "request_num": 50,
+        "status_code": 200,
+        "elapsed_time": 2.676935911178589,
+        "error": "",
+        "timestamp": "2025-06-30T22:19:57.492710"
+      }
+    ]
+  },
+  {
+    "test": "malformed_session",
+    "results": [
+      {
+        "test_name": "empty_session",
+        "session_key": "",
+        "status_code": 403,
+        "elapsed_time": 0.07624411582946777,
+        "error": "HTTP 403: Forbidden"
+      },
+      {
+        "test_name": "invalid_format",
+        "session_key": "invalid-session-key-...",
+        "status_code": 403,
+        "elapsed_time": 0.07184100151062012,
+        "error": "HTTP 403: Forbidden"
+      },
+      {
+        "test_name": "truncated",
+        "session_key": "sk-ant-sid01-",
+        "status_code": 403,
+        "elapsed_time": 0.08215594291687012,
+        "error": "HTTP 403: Forbidden"
+      },
+      {
+        "test_name": "wrong_prefix",
+        "session_key": "wrong-prefix-ERCPNBl...",
+        "status_code": 403,
+        "elapsed_time": 0.19853901863098145,
+        "error": "HTTP 403: Forbidden"
+      },
+      {
+        "test_name": "expired_format",
+        "session_key": "sk-ant-sid01-EXPIRED...",
+        "status_code": 403,
+        "elapsed_time": 0.10047793388366699,
+        "error": "HTTP 403: Forbidden"
+      }
+    ]
+  }
+]

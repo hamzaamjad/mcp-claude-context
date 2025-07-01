@@ -26,17 +26,20 @@ poetry.lock
 
 # Extracted data (contains personal conversations)
 extracted_messages/
+exports/
 conversations.json
-discovered_endpoints.json
-api_investigation_results.json
-rate_limit_test_results.txt
 
 # Config files with personal data
 claude-desktop-config.json
 fixed-claude-config.json
+session_key.txt
+cookies.json
 
 # Test files
 test_*.py
+
+# Environment
+.env
 
 # Cache
 .pytest_cache/

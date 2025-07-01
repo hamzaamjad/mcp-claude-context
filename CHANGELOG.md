@@ -1,91 +1,41 @@
-# CHANGELOG
+# Changelog
 
-All notable changes to the claude-context MCP server will be documented in this file.
+All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [0.2.0] - 2025-06-30
+## [0.3.0] - 2025-01-01
 
 ### Added
-- Direct API implementation for Claude.ai conversation access
-- New `export_conversations` tool for exporting to JSON/CSV formats
-- Comprehensive rate limiting tests
-- Session validation and error handling
-- Export functionality with timestamps and file size reporting
+- New `get_conversation_messages` tool to read locally extracted conversation data
+- New `search_messages` tool to search across all extracted message content
+- Message caching system for improved performance
+- Integration between MCP server and Chrome extension extracted data
+- Comprehensive test suite for new features
 
 ### Changed
-- Switched from Playwright-based browser automation to direct API calls
-- Improved authentication handling with session keys and organization IDs
-- Enhanced error messages for better debugging
+- Updated MCP server to version 0.3.0
+- Reorganized repository structure with dedicated directories for scripts, docs, and config
+- Enhanced README with architecture diagram and usage examples
+- Improved error handling with helpful hints for users
 
 ### Fixed
-- Cloudflare protection bypass issues from v0.1.0
-- Timeout issues when accessing conversations
-- Authentication failures with browser automation
+- Better error messages when extracted data is not found
+- Proper merging of API metadata with extracted messages
 
-### Technical Details
-- Uses Claude.ai's `/api/organizations/{org_id}/chat_conversations` endpoint
-- Requires both `session_key` and `org_id` for authentication
-- Implements conversation caching for improved performance
-- No rate limiting detected up to 50 requests/17 seconds (~3 req/sec)
+## [0.2.0] - 2024-12-31
 
-## [0.1.0] - 2025-06-25 (Deprecated)
+### Added
+- Direct API access implementation bypassing Cloudflare
+- Chrome extension for message extraction from DOM
+- Bridge server for receiving extracted data
+- Export functionality for conversations (JSON/CSV)
 
-### Initial Release
-- Playwright-based browser automation implementation
+### Changed
+- Switched from Playwright to direct API access for better reliability
+- Moved message extraction to Chrome extension due to API limitations
+
+## [0.1.0] - 2024-12-30
+
+### Added
+- Initial MCP server implementation
 - Basic conversation listing functionality
-- Message extraction attempts
-
-### Known Issues
-- Failed due to Cloudflare protection on Claude.ai
-- Browser automation detected and blocked
-- Frequent timeout errors
-- Unable to retrieve conversation content reliably
-
-### Deprecated
-- This version is no longer functional due to anti-automation measures
-
----
-
-## Migration Guide
-
-### From v0.1.0 to v0.2.0
-
-1. **Update authentication method:**
-   - Old: Browser-based login
-   - New: Session key + Organization ID
-
-2. **Update tool calls:**
-   ```python
-   # Old (v0.1.0)
-   extract_conversation(url="https://claude.ai/chat/...")
-   
-   # New (v0.2.0)
-   list_conversations(
-     session_key="YOUR_SESSION_KEY_HERE",
-     org_id="YOUR_ORG_ID_HERE",
-     limit=50
-   )
-   ```
-
-3. **Handle new response format:**
-   - Responses now include structured JSON with status indicators
-   - Error handling is more granular with specific error codes
-
-## Future Roadmap
-
-### v0.3.0 (Planned)
-- Message content retrieval (pending API discovery)
-- WebSocket integration for real-time updates
-- Pagination support for large conversation lists
-
-### v0.4.0 (Planned)
-- Browser extension bridge for complete message access
-- Local caching with SQLite
-- Incremental sync capabilities
-
-### v1.0.0 (Target)
-- Full conversation and message export
-- Complete API parity with Claude.ai web interface
-- Production-ready stability and performance
+- Playwright-based web scraping (deprecated)

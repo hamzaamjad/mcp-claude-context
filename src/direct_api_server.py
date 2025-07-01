@@ -34,7 +34,9 @@ class DirectAPIClaudeContextServer:
         self.server = Server("claude-context-direct")
         self._setup_handlers()
         self.conversations_cache: Dict[str, Any] = {}
+        self.messages_cache: Dict[str, Any] = {}  # Cache for extracted messages
         self.session = requests.Session()
+        self.extracted_messages_dir = Path("/Users/hamzaamjad/mcp-claude-context/extracted_messages")
         
     def _setup_handlers(self):
         """Set up MCP handlers for tools and resources."""
@@ -140,6 +142,46 @@ class DirectAPIClaudeContextServer:
                         },
                         "required": ["session_key", "org_id"]
                     }
+                ),
+                Tool(
+                    name="get_conversation_messages",
+                    description="Get full conversation messages from locally extracted data",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "conversation_id": {
+                                "type": "string",
+                                "description": "Conversation UUID (required)"
+                            }
+                        },
+                        "required": ["conversation_id"]
+                    }
+                ),
+                Tool(
+                    name="search_messages",
+                    description="Search through all extracted message content",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Search query to find in message content"
+                            },
+                            "case_sensitive": {
+                                "type": "boolean",
+                                "description": "Whether search should be case sensitive",
+                                "default": false
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Maximum number of results to return",
+                                "minimum": 1,
+                                "maximum": 100,
+                                "default": 20
+                            }
+                        },
+                        "required": ["query"]
+                    }
                 )
             ]
         
@@ -171,6 +213,16 @@ class DirectAPIClaudeContextServer:
                         arguments.get("org_id"),
                         arguments.get("format", "json"),
                         arguments.get("include_settings", False)
+                    )
+                elif name == "get_conversation_messages":
+                    result = await self._get_conversation_messages(
+                        arguments.get("conversation_id")
+                    )
+                elif name == "search_messages":
+                    result = await self._search_messages(
+                        arguments.get("query"),
+                        arguments.get("case_sensitive", False),
+                        arguments.get("limit", 20)
                     )
                 else:
                     raise ValueError(f"Unknown tool: {name}")
@@ -439,14 +491,187 @@ class DirectAPIClaudeContextServer:
             size_bytes /= 1024.0
         return f"{size_bytes:.2f} TB"
     
+    async def _get_conversation_messages(self, conversation_id: str) -> Dict[str, Any]:
+        """Get full conversation messages from locally extracted data."""
+        logger.info(f"Getting messages for conversation {conversation_id}")
+        
+        # Check cache first
+        if conversation_id in self.messages_cache:
+            logger.info(f"Returning cached messages for {conversation_id}")
+            return {
+                "status": "success",
+                "source": "cache",
+                "conversation": self.messages_cache[conversation_id]
+            }
+        
+        # Check if conversation directory exists
+        conv_dir = self.extracted_messages_dir / conversation_id
+        
+        if not conv_dir.exists():
+            logger.warning(f"No extracted data found for conversation {conversation_id}")
+            return {
+                "status": "error",
+                "error": f"No extracted data found for conversation {conversation_id}",
+                "hint": "Use the Chrome extension to extract messages from Claude.ai first"
+            }
+        
+        try:
+            # Read metadata
+            metadata_file = conv_dir / "metadata.json"
+            messages_file = conv_dir / "messages.json"
+            
+            metadata = {}
+            if metadata_file.exists():
+                with open(metadata_file, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+            
+            # Read messages
+            messages_data = {}
+            if messages_file.exists():
+                with open(messages_file, 'r', encoding='utf-8') as f:
+                    messages_data = json.load(f)
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Messages file not found for conversation {conversation_id}",
+                    "hint": "The conversation may have been extracted without messages"
+                }
+            
+            # Combine metadata and messages
+            conversation_data = {
+                "id": conversation_id,
+                "title": metadata.get("title", "Untitled"),
+                "created_at": metadata.get("created_at"),
+                "updated_at": metadata.get("updated_at"),
+                "extracted_at": metadata.get("extracted_at"),
+                "message_count": messages_data.get("message_count", 0),
+                "messages": messages_data.get("messages", [])
+            }
+            
+            # Cache the result
+            self.messages_cache[conversation_id] = conversation_data
+            
+            # Also check if we have this conversation in our API cache
+            if conversation_id in self.conversations_cache:
+                # Merge API metadata with extracted messages
+                api_data = self.conversations_cache[conversation_id]
+                conversation_data.update({
+                    "name": api_data.get("name", conversation_data.get("title")),
+                    "model": api_data.get("model"),
+                    "is_starred": api_data.get("is_starred", False),
+                    "settings": api_data.get("settings", {})
+                })
+            
+            return {
+                "status": "success",
+                "source": "disk",
+                "conversation": conversation_data
+            }
+            
+        except Exception as e:
+            logger.error(f"Error reading conversation messages: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
+    async def _search_messages(self, query: str, case_sensitive: bool = False, limit: int = 20) -> Dict[str, Any]:
+        """Search through all extracted message content."""
+        logger.info(f"Searching for '{query}' in extracted messages")
+        
+        if not query:
+            return {
+                "status": "error",
+                "error": "Search query cannot be empty"
+            }
+        
+        results = []
+        search_query = query if case_sensitive else query.lower()
+        
+        try:
+            # Search through all conversation directories
+            if self.extracted_messages_dir.exists():
+                for conv_dir in self.extracted_messages_dir.iterdir():
+                    if not conv_dir.is_dir():
+                        continue
+                    
+                    conv_id = conv_dir.name
+                    messages_file = conv_dir / "messages.json"
+                    metadata_file = conv_dir / "metadata.json"
+                    
+                    if not messages_file.exists():
+                        continue
+                    
+                    # Read conversation data
+                    with open(messages_file, 'r', encoding='utf-8') as f:
+                        messages_data = json.load(f)
+                    
+                    metadata = {}
+                    if metadata_file.exists():
+                        with open(metadata_file, 'r', encoding='utf-8') as f:
+                            metadata = json.load(f)
+                    
+                    # Search through messages
+                    for i, message in enumerate(messages_data.get("messages", [])):
+                        content = message.get("content", "")
+                        search_content = content if case_sensitive else content.lower()
+                        
+                        if search_query in search_content:
+                            # Find the specific lines that match
+                            lines = content.split('\n')
+                            matching_lines = []
+                            
+                            for line_num, line in enumerate(lines):
+                                search_line = line if case_sensitive else line.lower()
+                                if search_query in search_line:
+                                    # Add context (previous and next line if available)
+                                    context_start = max(0, line_num - 1)
+                                    context_end = min(len(lines), line_num + 2)
+                                    context = '\n'.join(lines[context_start:context_end])
+                                    matching_lines.append({
+                                        "line_number": line_num + 1,
+                                        "line": line.strip(),
+                                        "context": context
+                                    })
+                            
+                            results.append({
+                                "conversation_id": conv_id,
+                                "conversation_title": metadata.get("title", "Untitled"),
+                                "message_index": i,
+                                "message_role": message.get("role", "unknown"),
+                                "matching_lines": matching_lines[:3],  # Limit context lines per message
+                                "content_preview": content[:200] + "..." if len(content) > 200 else content
+                            })
+                            
+                            if len(results) >= limit:
+                                break
+                    
+                    if len(results) >= limit:
+                        break
+            
+            return {
+                "status": "success",
+                "query": query,
+                "case_sensitive": case_sensitive,
+                "total_results": len(results),
+                "results": results[:limit]
+            }
+            
+        except Exception as e:
+            logger.error(f"Error searching messages: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
     async def run(self):
         """Run the MCP server."""
         async with stdio_server() as (read_stream, write_stream):
             initialization_options = InitializationOptions(
                 server_name="claude-context-direct",
-                server_version="0.2.0",
+                server_version="0.3.0",
                 capabilities=ServerCapabilities(),
-                instructions="Direct API MCP server for Claude.ai conversations. Requires session_key and org_id."
+                instructions="Direct API MCP server for Claude.ai conversations. Supports API-based conversation listing and local extracted message reading. API tools require session_key and org_id. Message tools work with locally extracted data."
             )
             await self.server.run(read_stream, write_stream, initialization_options)
 

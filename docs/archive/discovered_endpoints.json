@@ -1,0 +1,139 @@
+{
+  "base_url": "https://claude.ai",
+  "timestamp": "2025-06-30 22:01:27",
+  "endpoints": [
+    {
+      "endpoint": "/api/account",
+      "method": "GET",
+      "status": 200,
+      "response_preview": "{'error': 'Failed to decode response: BrotliDecompress failed', 'raw_length': 163036}",
+      "metadata": {
+        "content_type": "application/json",
+        "content_encoding": "br",
+        "content_length": ""
+      }
+    },
+    {
+      "endpoint": "/api/organizations",
+      "method": "GET",
+      "status": 200,
+      "response_preview": "{'error': 'Failed to decode response: BrotliDecompress failed', 'raw_length': 1817}",
+      "metadata": {
+        "content_type": "application/json",
+        "content_encoding": "br",
+        "content_length": ""
+      }
+    },
+    {
+      "endpoint": "/api/bootstrap",
+      "method": "GET",
+      "status": 200,
+      "response_preview": "{'error': 'Failed to decode response: BrotliDecompress failed', 'raw_length': 163377}",
+      "metadata": {
+        "content_type": "application/json",
+        "content_encoding": "br",
+        "content_length": ""
+      }
+    },
+    {
+      "endpoint": "/api/organizations/ec265751-a3c2-4d06-8b5c-f136b8e5c0c3",
+      "method": "GET",
+      "status": 200,
+      "response_preview": "{'error': 'Failed to decode response: BrotliDecompress failed', 'raw_length': 922}",
+      "metadata": {
+        "content_type": "application/json",
+        "content_encoding": "br",
+        "content_length": ""
+      }
+    },
+    {
+      "endpoint": "/api/organizations/ec265751-a3c2-4d06-8b5c-f136b8e5c0c3/members",
+      "method": "GET",
+      "status": 200,
+      "response_preview": "{'error': 'Failed to decode response: BrotliDecompress failed', 'raw_length': 278}",
+      "metadata": {
+        "content_type": "application/json",
+        "content_encoding": "br",
+        "content_length": ""
+      }
+    },
+    {
+      "endpoint": "/api/organizations/ec265751-a3c2-4d06-8b5c-f136b8e5c0c3/projects",
+      "method": "GET",
+      "status": 200,
+      "response_preview": "{'error': 'Failed to decode response: BrotliDecompress failed', 'raw_length': 986}",
+      "metadata": {
+        "content_type": "application/json",
+        "content_encoding": "br",
+        "content_length": ""
+      }
+    },
+    {
+      "endpoint": "/api/organizations/ec265751-a3c2-4d06-8b5c-f136b8e5c0c3/chat_conversations",
+      "method": "GET",
+      "status": 200,
+      "response_preview": "{'error': 'Failed to decode response: BrotliDecompress failed', 'raw_length': 122530}",
+      "metadata": {
+        "content_type": "application/json",
+        "content_encoding": "br",
+        "content_length": ""
+      }
+    },
+    {
+      "endpoint": "/graphql",
+      "method": "POST",
+      "status": 200,
+      "request_data": {
+        "query": "{ __typename }"
+      },
+      "response_preview": "{'error': 'Failed to decode response: BrotliDecompress failed', 'raw_length': 441573}",
+      "metadata": {
+        "content_type": "text/html; charset=utf-8",
+        "content_encoding": "br",
+        "content_length": ""
+      }
+    },
+    {
+      "endpoint": "/graphql",
+      "method": "POST",
+      "status": 200,
+      "request_data": {
+        "query": "{ me { id name email } }"
+      },
+      "response_preview": "{'error': 'Failed to decode response: BrotliDecompress failed', 'raw_length': 441573}",
+      "metadata": {
+        "content_type": "text/html; charset=utf-8",
+        "content_encoding": "br",
+        "content_length": ""
+      }
+    },
+    {
+      "endpoint": "/graphql",
+      "method": "POST",
+      "status": 200,
+      "request_data": {
+        "query": "{ conversations { edges { node { id title } } } }"
+      },
+      "response_preview": "{'error': 'Failed to decode response: BrotliDecompress failed', 'raw_length': 441573}",
+      "metadata": {
+        "content_type": "text/html; charset=utf-8",
+        "content_encoding": "br",
+        "content_length": ""
+      }
+    },
+    {
+      "endpoint": "/graphql",
+      "method": "POST",
+      "status": 200,
+      "request_data": {
+        "query": "{ organizations { id name } }"
+      },
+      "response_preview": "{'error': 'Failed to decode response: BrotliDecompress failed', 'raw_length': 441572}",
+      "metadata": {
+        "content_type": "text/html; charset=utf-8",
+        "content_encoding": "br",
+        "content_length": ""
+      }
+    }
+  ]
+}

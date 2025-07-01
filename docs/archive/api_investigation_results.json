@@ -1,0 +1,119 @@
+{
+  "timestamp": "2025-06-30 22:17:23",
+  "org_id": "ec265751-a3c2-4d06-8b5c-f136b8e5c0c3",
+  "conversation_id": "5b585cbe-7982-425a-97c5-d828f39dc37a",
+  "total_endpoints_tested": 11,
+  "successful_endpoints": 0,
+  "results": [
+    {
+      "endpoint": "https://claude.ai/api/organizations/ec265751-a3c2-4d06-8b5c-f136b8e5c0c3/chat_conversations/5b585cbe-7982-425a-97c5-d828f39dc37a/messages",
+      "method": "GET",
+      "description": "Organization-scoped chat conversation messages",
+      "status_code": 404,
+      "elapsed_time": 0.08305883407592773,
+      "success": false,
+      "error": "HTTP 404: Not Found",
+      "error_response": null
+    },
+    {
+      "endpoint": "https://claude.ai/api/organizations/ec265751-a3c2-4d06-8b5c-f136b8e5c0c3/conversations/5b585cbe-7982-425a-97c5-d828f39dc37a/messages",
+      "method": "GET",
+      "description": "Organization-scoped conversation messages",
+      "status_code": 404,
+      "elapsed_time": 0.10991120338439941,
+      "success": false,
+      "error": "HTTP 404: Not Found",
+      "error_response": null
+    },
+    {
+      "endpoint": "https://claude.ai/api/conversations/5b585cbe-7982-425a-97c5-d828f39dc37a/messages",
+      "method": "GET",
+      "description": "Direct conversation messages",
+      "status_code": 404,
+      "elapsed_time": 0.07404589653015137,
+      "success": false,
+      "error": "HTTP 404: Not Found",
+      "error_response": null
+    },
+    {
+      "endpoint": "https://claude.ai/api/messages?conversation_id=5b585cbe-7982-425a-97c5-d828f39dc37a",
+      "method": "GET",
+      "description": "Messages with query parameter",
+      "status_code": 404,
+      "elapsed_time": 0.07993507385253906,
+      "success": false,
+      "error": "HTTP 404: Not Found",
+      "error_response": null
+    },
+    {
+      "endpoint": "https://claude.ai/api/organizations/ec265751-a3c2-4d06-8b5c-f136b8e5c0c3/messages?conversation_id=5b585cbe-7982-425a-97c5-d828f39dc37a",
+      "method": "GET",
+      "description": "Organization messages with query parameter",
+      "status_code": 404,
+      "elapsed_time": 0.0752561092376709,
+      "success": false,
+      "error": "HTTP 404: Not Found",
+      "error_response": null
+    },
+    {
+      "endpoint": "https://claude.ai/api/chat_conversations/5b585cbe-7982-425a-97c5-d828f39dc37a/messages",
+      "method": "GET",
+      "description": "Chat conversation messages",
+      "status_code": 404,
+      "elapsed_time": 0.08792614936828613,
+      "success": false,
+      "error": "HTTP 404: Not Found",
+      "error_response": null
+    },
+    {
+      "endpoint": "https://claude.ai/api/organizations/ec265751-a3c2-4d06-8b5c-f136b8e5c0c3/conversations/5b585cbe-7982-425a-97c5-d828f39dc37a",
+      "method": "GET",
+      "description": "Full conversation data (might include messages)",
+      "status_code": 404,
+      "elapsed_time": 0.08648514747619629,
+      "success": false,
+      "error": "HTTP 404: Not Found",
+      "error_response": null
+    },
+    {
+      "endpoint": "https://claude.ai/api/organizations/ec265751-a3c2-4d06-8b5c-f136b8e5c0c3/conversations/5b585cbe-7982-425a-97c5-d828f39dc37a/history",
+      "method": "GET",
+      "description": "Conversation history endpoint",
+      "status_code": 404,
+      "elapsed_time": 0.08890986442565918,
+      "success": false,
+      "error": "HTTP 404: Not Found",
+      "error_response": null
+    },
+    {
+      "endpoint": "https://claude.ai/api/organizations/ec265751-a3c2-4d06-8b5c-f136b8e5c0c3/conversations/5b585cbe-7982-425a-97c5-d828f39dc37a/tree",
+      "method": "GET",
+      "description": "Conversation tree (for branching)",
+      "status_code": 404,
+      "elapsed_time": 0.07700824737548828,
+      "success": false,
+      "error": "HTTP 404: Not Found",
+      "error_response": null
+    },
+    {
+      "endpoint": "https://claude.ai/api/legacy/conversations/5b585cbe-7982-425a-97c5-d828f39dc37a/messages",
+      "method": "GET",
+      "description": "Legacy messages endpoint",
+      "status_code": 404,
+      "elapsed_time": 0.07080197334289551,
+      "success": false,
+      "error": "HTTP 404: Not Found",
+      "error_response": null
+    },
+    {
+      "endpoint": "https://claude.ai/api/v1/organizations/ec265751-a3c2-4d06-8b5c-f136b8e5c0c3/conversations/5b585cbe-7982-425a-97c5-d828f39dc37a/messages",
+      "method": "GET",
+      "description": "Versioned API endpoint",
+      "status_code": 404,
+      "elapsed_time": 0.08711385726928711,
+      "success": false,
+      "error": "HTTP 404: Not Found",
+      "error_response": null
+    }
+  ]
+}
