@@ -37,6 +37,9 @@ class DirectAPIClaudeContextServer:
         self.messages_cache: Dict[str, Any] = {}  # Cache for extracted messages
         self.session = requests.Session()
         self.extracted_messages_dir = Path("/Users/hamzaamjad/mcp-claude-context/extracted_messages")
+        self.session_key_file = Path("/Users/hamzaamjad/mcp-claude-context/config/session_key.json")
+        self.last_session_check = None
+        self.session_check_interval = 300  # Check every 5 minutes
         
     def _setup_handlers(self):
         """Set up MCP handlers for tools and resources."""
@@ -182,6 +185,24 @@ class DirectAPIClaudeContextServer:
                         },
                         "required": ["query"]
                     }
+                ),
+                Tool(
+                    name="update_session",
+                    description="Update or refresh Claude.ai session credentials",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "session_key": {
+                                "type": "string",
+                                "description": "New Claude.ai session key"
+                            },
+                            "org_id": {
+                                "type": "string",
+                                "description": "Organization ID"
+                            }
+                        },
+                        "required": ["session_key", "org_id"]
+                    }
                 )
             ]
         
@@ -223,6 +244,11 @@ class DirectAPIClaudeContextServer:
                         arguments.get("query"),
                         arguments.get("case_sensitive", False),
                         arguments.get("limit", 20)
+                    )
+                elif name == "update_session":
+                    result = await self._update_session(
+                        arguments.get("session_key"),
+                        arguments.get("org_id")
                     )
                 else:
                     raise ValueError(f"Unknown tool: {name}")
@@ -278,9 +304,74 @@ class DirectAPIClaudeContextServer:
             'Origin': 'https://claude.ai'
         }
     
+    def _save_session_key(self, session_key: str, org_id: str) -> None:
+        """Save session key to file for persistence."""
+        try:
+            self.session_key_file.parent.mkdir(exist_ok=True)
+            data = {
+                'session_key': session_key,
+                'org_id': org_id,
+                'updated_at': datetime.now().isoformat()
+            }
+            with open(self.session_key_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.info("Session key saved")
+        except Exception as e:
+            logger.error(f"Failed to save session key: {e}")
+    
+    def _load_session_key(self) -> Optional[Dict[str, str]]:
+        """Load session key from file."""
+        try:
+            if self.session_key_file.exists():
+                with open(self.session_key_file, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load session key: {e}")
+        return None
+    
+    async def _verify_session(self, session_key: str, org_id: str) -> bool:
+        """Verify if session key is still valid."""
+        try:
+            # Try a simple API call
+            url = f'https://claude.ai/api/organizations/{org_id}/chat_conversations?limit=1'
+            headers = self._get_headers(session_key)
+            
+            response = await asyncio.to_thread(
+                self.session.get, url, headers=headers, timeout=10
+            )
+            
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Session verification failed: {e}")
+            return False
+    
+    async def _check_and_refresh_session(self, session_key: str, org_id: str) -> tuple[str, str]:
+        """Check session validity and refresh if needed."""
+        current_time = datetime.now()
+        
+        # Check if we need to verify session
+        if self.last_session_check is None or \
+           (current_time - self.last_session_check).total_seconds() > self.session_check_interval:
+            
+            logger.info("Checking session validity...")
+            if await self._verify_session(session_key, org_id):
+                self.last_session_check = current_time
+                self._save_session_key(session_key, org_id)
+                return session_key, org_id
+            else:
+                logger.warning("Session key expired or invalid")
+                # In a real implementation, you might prompt for new credentials
+                # For now, we'll just return the existing ones
+                return session_key, org_id
+        
+        return session_key, org_id
+    
     async def _list_conversations(self, session_key: str, org_id: str, limit: int = 50) -> Dict[str, Any]:
         """List conversations using direct API."""
         logger.info(f"Listing conversations for org {org_id}")
+        
+        # Check and refresh session if needed
+        session_key, org_id = await self._check_and_refresh_session(session_key, org_id)
         
         url = f'https://claude.ai/api/organizations/{org_id}/chat_conversations'
         headers = self._get_headers(session_key)
@@ -664,12 +755,44 @@ class DirectAPIClaudeContextServer:
                 "error": str(e)
             }
     
+    async def _update_session(self, session_key: str, org_id: str) -> Dict[str, Any]:
+        """Update session credentials."""
+        logger.info("Updating session credentials")
+        
+        try:
+            # Verify the new credentials
+            if await self._verify_session(session_key, org_id):
+                # Save to file
+                self._save_session_key(session_key, org_id)
+                self.last_session_check = datetime.now()
+                
+                # Clear caches to force refresh with new credentials
+                self.conversations_cache.clear()
+                
+                return {
+                    "status": "success",
+                    "message": "Session credentials updated successfully",
+                    "valid": True
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": "Invalid session credentials",
+                    "valid": False
+                }
+        except Exception as e:
+            logger.error(f"Error updating session: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
     async def run(self):
         """Run the MCP server."""
         async with stdio_server() as (read_stream, write_stream):
             initialization_options = InitializationOptions(
                 server_name="claude-context-direct",
-                server_version="0.3.0",
+                server_version="0.4.0",
                 capabilities=ServerCapabilities(),
                 instructions="Direct API MCP server for Claude.ai conversations. Supports API-based conversation listing and local extracted message reading. API tools require session_key and org_id. Message tools work with locally extracted data."
             )

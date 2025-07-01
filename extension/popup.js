@@ -1,97 +1,248 @@
-// Popup script for Claude Context Extension
+/**
+ * Enhanced popup script with bulk export functionality
+ */
 
-const statusDiv = document.getElementById('status');
-const serverStatusSpan = document.getElementById('server-connection');
+// State management
+let isExtracting = false;
+let extractionStats = {
+  total: 0,
+  completed: 0,
+  failed: 0,
+  skipped: 0
+};
 
-// Check bridge server status on load
-checkServerStatus();
+// Initialize popup
+document.addEventListener('DOMContentLoaded', async () => {
+  checkServerStatus();
+  updateStatistics();
+  
+  // Event listeners
+  document.getElementById('extract-current').addEventListener('click', extractCurrentConversation);
+  document.getElementById('extract-all').addEventListener('click', extractAllConversations);
+  document.getElementById('monitor-current').addEventListener('click', toggleMonitoring);
+  document.getElementById('check-status').addEventListener('click', checkServerStatus);
+  document.getElementById('refresh-status').addEventListener('click', checkServerStatus);
+  document.getElementById('open-dashboard').addEventListener('click', openDashboard);
+});
 
-// Button handlers
-document.getElementById('extract-current').addEventListener('click', extractCurrentConversation);
-document.getElementById('extract-all').addEventListener('click', extractAllMessages);
-document.getElementById('check-status').addEventListener('click', checkServerStatus);
-
+// Check bridge server status
 async function checkServerStatus() {
+  const statusEl = document.getElementById('server-connection');
+  const indicatorEl = document.getElementById('server-indicator');
+  
   try {
     const response = await fetch('http://localhost:8765/api/status');
     if (response.ok) {
       const data = await response.json();
-      serverStatusSpan.textContent = '✅ Connected';
-      serverStatusSpan.style.color = 'green';
-      showStatus(`Server running. ${data.conversations_cached} conversations cached.`, 'info');
+      statusEl.textContent = 'Connected';
+      indicatorEl.className = 'status-indicator connected';
+      updateStatistics();
     } else {
       throw new Error('Server not responding');
     }
   } catch (error) {
-    serverStatusSpan.textContent = '❌ Disconnected';
-    serverStatusSpan.style.color = 'red';
-    showStatus('Bridge server not running. Start it with: poetry run python extension/bridge_server.py', 'error');
+    statusEl.textContent = 'Disconnected';
+    indicatorEl.className = 'status-indicator disconnected';
+    showStatus('Bridge server is not running. Please start it first.', 'error');
   }
 }
 
+// Update statistics
+async function updateStatistics() {
+  try {
+    // Get conversation count from Claude.ai
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab.url && tab.url.includes('claude.ai')) {
+      chrome.tabs.sendMessage(tab.id, { action: 'get_stats' }, (response) => {
+        if (response && response.success) {
+          document.getElementById('total-conversations').textContent = response.total || '-';
+        }
+      });
+    }
+    
+    // Get extracted count from bridge server
+    const response = await fetch('http://localhost:8765/api/conversations');
+    if (response.ok) {
+      const data = await response.json();
+      document.getElementById('extracted-count').textContent = data.count || '0';
+    }
+  } catch (error) {
+    console.error('Error updating statistics:', error);
+  }
+}
+
+// Extract current conversation
 async function extractCurrentConversation() {
-  showStatus('Extracting conversation...', 'info');
+  const button = document.getElementById('extract-current');
+  button.disabled = true;
   
   try {
-    // Get active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
-    if (!tab.url.includes('claude.ai')) {
-      showStatus('Please navigate to a Claude.ai conversation', 'error');
+    if (!tab.url || !tab.url.includes('claude.ai/chat/')) {
+      showStatus('Please navigate to a Claude conversation first.', 'error');
       return;
     }
     
-    // Send message to content script
-    chrome.tabs.sendMessage(tab.id, { action: 'extract_conversations' }, (response) => {
+    chrome.tabs.sendMessage(tab.id, { action: 'extract_conversation' }, (response) => {
       if (chrome.runtime.lastError) {
-        showStatus('Failed to extract. Make sure you\'re on a conversation page.', 'error');
-      } else if (response && response.success) {
-        showStatus(`Extracted: ${response.data.title || 'Untitled conversation'}`, 'success');
+        showStatus('Error: ' + chrome.runtime.lastError.message, 'error');
+      } else if (response.success) {
+        showStatus(`Extracted "${response.data.title}" (${response.messageCount} messages)`, 'success');
+        updateStatistics();
       } else {
-        showStatus(response?.error || 'Extraction failed', 'error');
+        showStatus('Error: ' + response.error, 'error');
       }
+      button.disabled = false;
     });
   } catch (error) {
-    showStatus(`Error: ${error.message}`, 'error');
+    showStatus('Error: ' + error.message, 'error');
+    button.disabled = false;
   }
 }
 
-async function extractAllMessages() {
-  showStatus('Extracting all messages...', 'info');
+// Extract all conversations
+async function extractAllConversations() {
+  if (isExtracting) {
+    stopBulkExtraction();
+    return;
+  }
+  
+  const button = document.getElementById('extract-all');
+  const progressContainer = document.getElementById('bulk-progress');
+  const progressFill = document.getElementById('progress-fill');
+  const progressText = document.getElementById('progress-text');
+  
+  // Reset stats
+  extractionStats = { total: 0, completed: 0, failed: 0, skipped: 0 };
+  
+  // Update UI
+  isExtracting = true;
+  button.textContent = 'Stop Extraction';
+  button.classList.add('danger');
+  progressContainer.style.display = 'block';
   
   try {
-    // Get active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
-    if (!tab.url.includes('claude.ai')) {
-      showStatus('Please navigate to a Claude.ai conversation', 'error');
+    if (!tab.url || !tab.url.includes('claude.ai')) {
+      showStatus('Please navigate to Claude.ai first.', 'error');
+      stopBulkExtraction();
       return;
     }
     
-    // Send message to content script
-    chrome.tabs.sendMessage(tab.id, { action: 'extract_messages' }, (response) => {
+    // Get options
+    const skipExisting = document.getElementById('skip-existing').checked;
+    const autoScroll = document.getElementById('auto-scroll').checked;
+    const delayBetween = parseInt(document.getElementById('delay-between').value) * 1000;
+    
+    // Start bulk extraction
+    chrome.tabs.sendMessage(tab.id, {
+      action: 'start_bulk_extraction',
+      options: { skipExisting, autoScroll, delayBetween }
+    }, (response) => {
       if (chrome.runtime.lastError) {
-        showStatus('Failed to extract messages. Make sure you\'re on a conversation page.', 'error');
-      } else if (response && response.success) {
-        showStatus(`Extracted ${response.messageCount} messages`, 'success');
-      } else {
-        showStatus(response?.error || 'Message extraction failed', 'error');
+        showStatus('Error: ' + chrome.runtime.lastError.message, 'error');
+        stopBulkExtraction();
       }
     });
+    
+    // Listen for progress updates
+    chrome.runtime.onMessage.addListener(handleBulkProgress);
+    
   } catch (error) {
-    showStatus(`Error: ${error.message}`, 'error');
+    showStatus('Error: ' + error.message, 'error');
+    stopBulkExtraction();
   }
 }
 
-function showStatus(message, type) {
-  statusDiv.textContent = message;
-  statusDiv.className = type;
-  statusDiv.style.display = 'block';
+// Handle bulk extraction progress
+function handleBulkProgress(message, sender, sendResponse) {
+  if (message.type !== 'bulk_progress') return;
   
-  // Auto-hide success messages
-  if (type === 'success') {
-    setTimeout(() => {
-      statusDiv.style.display = 'none';
-    }, 5000);
+  const { stats, status, current } = message;
+  extractionStats = stats;
+  
+  // Update progress bar
+  const progress = stats.total > 0 ? Math.round((stats.completed + stats.failed + stats.skipped) / stats.total * 100) : 0;
+  document.getElementById('progress-fill').style.width = `${progress}%`;
+  document.getElementById('progress-fill').textContent = `${progress}%`;
+  
+  // Update progress text
+  let statusText = `${stats.completed} extracted`;
+  if (stats.skipped > 0) statusText += `, ${stats.skipped} skipped`;
+  if (stats.failed > 0) statusText += `, ${stats.failed} failed`;
+  if (current) statusText += ` - Current: ${current}`;
+  
+  document.getElementById('progress-text').textContent = statusText;
+  
+  // Check if completed
+  if (status === 'completed' || status === 'stopped') {
+    showStatus(`Bulk extraction ${status}. ${stats.completed} conversations extracted.`, 
+               status === 'completed' ? 'success' : 'warning');
+    stopBulkExtraction();
   }
+}
+
+// Stop bulk extraction
+function stopBulkExtraction() {
+  isExtracting = false;
+  const button = document.getElementById('extract-all');
+  button.textContent = 'Extract All Conversations';
+  button.classList.remove('danger');
+  
+  // Send stop message
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]) {
+      chrome.tabs.sendMessage(tabs[0].id, { action: 'stop_bulk_extraction' });
+    }
+  });
+  
+  // Remove progress listener
+  chrome.runtime.onMessage.removeListener(handleBulkProgress);
+  
+  updateStatistics();
+}
+
+// Toggle real-time monitoring
+async function toggleMonitoring() {
+  const button = document.getElementById('monitor-current');
+  const isMonitoring = button.textContent.includes('Stop');
+  
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    if (!tab.url || !tab.url.includes('claude.ai/chat/')) {
+      showStatus('Please navigate to a Claude conversation first.', 'error');
+      return;
+    }
+    
+    const action = isMonitoring ? 'stop_monitoring' : 'start_monitoring';
+    chrome.tabs.sendMessage(tab.id, { action }, (response) => {
+      if (response && response.success) {
+        button.textContent = isMonitoring ? 'Start Real-time Monitoring' : 'Stop Monitoring';
+        showStatus(response.message, 'success');
+      }
+    });
+  } catch (error) {
+    showStatus('Error: ' + error.message, 'error');
+  }
+}
+
+// Open analytics dashboard
+function openDashboard() {
+  chrome.tabs.create({ url: 'http://localhost:8765/dashboard' });
+}
+
+// Show status message
+function showStatus(message, type = 'info') {
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = message;
+  statusEl.className = type;
+  statusEl.style.display = 'block';
+  
+  // Auto-hide after 5 seconds
+  setTimeout(() => {
+    statusEl.style.display = 'none';
+  }, 5000);
 }

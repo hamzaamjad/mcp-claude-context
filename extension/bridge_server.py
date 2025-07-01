@@ -41,6 +41,10 @@ class BridgeServer:
         self.app.router.add_post('/api/messages', self.handle_messages)
         self.app.router.add_get('/api/status', self.handle_status)
         self.app.router.add_get('/api/conversations', self.list_conversations)
+        self.app.router.add_get('/api/conversations/{conv_id}', self.check_conversation)
+        self.app.router.add_get('/api/analytics', self.get_analytics)
+        self.app.router.add_get('/dashboard', self.serve_dashboard)
+        self.app.router.add_get('/', self.serve_dashboard)
         
     def _setup_cors(self):
         """Set up CORS for browser extension access."""
@@ -161,6 +165,41 @@ class BridgeServer:
             'conversations': conversations_list
         })
     
+    async def check_conversation(self, request: Request) -> Response:
+        """Check if a specific conversation has been extracted."""
+        conv_id = request.match_info.get('conv_id')
+        
+        # Check in memory
+        if conv_id in self.conversations:
+            return json_response({
+                'status': 'success',
+                'exists': True,
+                'data': self.conversations[conv_id]
+            })
+        
+        # Check on disk
+        conv_dir = STORAGE_DIR / conv_id
+        if conv_dir.exists() and (conv_dir / "messages.json").exists():
+            # Load it into memory
+            try:
+                metadata_file = conv_dir / "metadata.json"
+                if metadata_file.exists():
+                    with open(metadata_file, 'r', encoding='utf-8') as f:
+                        metadata = json.load(f)
+                        self.conversations[conv_id] = metadata
+                        return json_response({
+                            'status': 'success',
+                            'exists': True,
+                            'data': metadata
+                        })
+            except Exception as e:
+                logger.error(f"Error loading conversation {conv_id}: {e}")
+        
+        return json_response({
+            'status': 'success',
+            'exists': False
+        }, status=404)
+    
     async def _save_conversation(self, conv_id: str, data: Dict[str, Any], include_messages: bool = False):
         """Save conversation to disk."""
         try:
@@ -201,10 +240,58 @@ class BridgeServer:
         except Exception as e:
             logger.error(f"Error saving conversation {conv_id}: {e}")
     
+    async def get_analytics(self, request: Request) -> Response:
+        """Get analytics data for all conversations."""
+        analytics_data = []
+        
+        # Load all conversations from disk
+        if STORAGE_DIR.exists():
+            for conv_dir in STORAGE_DIR.iterdir():
+                if not conv_dir.is_dir():
+                    continue
+                
+                try:
+                    # Load metadata
+                    metadata_file = conv_dir / "metadata.json"
+                    messages_file = conv_dir / "messages.json"
+                    
+                    if metadata_file.exists():
+                        with open(metadata_file, 'r', encoding='utf-8') as f:
+                            metadata = json.load(f)
+                        
+                        # Add message data if available
+                        if messages_file.exists():
+                            with open(messages_file, 'r', encoding='utf-8') as f:
+                                messages_data = json.load(f)
+                                metadata['messages'] = messages_data.get('messages', [])
+                                metadata['message_count'] = len(metadata['messages'])
+                        
+                        analytics_data.append(metadata)
+                except Exception as e:
+                    logger.error(f"Error loading conversation {conv_dir.name}: {e}")
+        
+        return json_response({
+            'status': 'success',
+            'conversations': analytics_data,
+            'total': len(analytics_data)
+        })
+    
+    async def serve_dashboard(self, request: Request) -> Response:
+        """Serve the analytics dashboard."""
+        dashboard_path = Path(__file__).parent / "dashboard.html"
+        
+        if dashboard_path.exists():
+            with open(dashboard_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return web.Response(text=content, content_type='text/html')
+        else:
+            return web.Response(text="Dashboard not found", status=404)
+    
     def run(self):
         """Run the bridge server."""
         logger.info(f"Starting bridge server on http://{self.host}:{self.port}")
         logger.info(f"Storage directory: {STORAGE_DIR}")
+        logger.info(f"Analytics dashboard: http://{self.host}:{self.port}/dashboard")
         logger.info("Waiting for messages from browser extension...")
         
         web.run_app(

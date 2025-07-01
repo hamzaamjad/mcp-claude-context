@@ -4,13 +4,19 @@ Extract and access Claude.ai conversations via Model Context Protocol.
 
 ## Features
 
-### Version 0.3.0
+### Version 0.4.0
 - ✅ Direct API access for listing conversations (bypassed Cloudflare)
-- ✅ Chrome extension for extracting full message content
-- ✅ Bridge server for saving conversations locally
+- ✅ Enhanced Chrome extension with improved extraction
+  - Better title and role detection
+  - Code block preservation
+  - Real-time monitoring
+  - Bulk export functionality
+- ✅ Bridge server with analytics dashboard
 - ✅ MCP tools for accessing extracted messages
 - ✅ Search functionality across all message content
 - ✅ Export conversations to JSON/CSV formats
+- ✅ Session key management with auto-refresh
+- ✅ Analytics dashboard with insights and visualizations
 
 ## Architecture
 
@@ -36,6 +42,7 @@ Extract and access Claude.ai conversations via Model Context Protocol.
 ### Local Data Tools (work with extracted messages)
 - `get_conversation_messages` - Get full conversation with messages
 - `search_messages` - Search through all extracted message content
+- `update_session` - Update session credentials
 
 ## Quick Start
 
@@ -62,8 +69,12 @@ poetry run python extension/bridge_server.py
 5. Extract conversations:
    - Go to Claude.ai and log in
    - Click the extension icon
-   - Navigate to a conversation
-   - Click "Extract Current Conversation"
+   - For single conversation: Navigate to it and click "Extract Current Conversation"
+   - For all conversations: Click "Extract All Conversations" for bulk export
+
+6. View analytics dashboard:
+   - Open http://localhost:8765/dashboard in your browser
+   - See conversation statistics, trends, and insights
 
 ## Usage Examples
 

@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Conversations Analytics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #007bff;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #007bff;
+            margin: 10px 0;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .chart-title {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #444;
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+        
+        .conversations-list {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .conversation-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .conversation-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .conversation-item:last-child {
+            border-bottom: none;
+        }
+        
+        .conversation-title {
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+        
+        .conversation-meta {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .refresh-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        
+        .refresh-btn:hover {
+            background-color: #0056b3;
+        }
+        
+        .time-filter {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+        
+        .filter-btn {
+            background-color: #e9ecef;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .filter-btn.active {
+            background-color: #007bff;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Claude Conversations Analytics</h1>
+        
+        <button class="refresh-btn" onclick="refreshData()">Refresh Data</button>
+        
+        <div id="loading" class="loading">Loading analytics data...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="content" style="display: none;">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Conversations</div>
+                    <div class="stat-value" id="total-conversations">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Messages</div>
+                    <div class="stat-value" id="total-messages">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Average Messages/Conv</div>
+                    <div class="stat-value" id="avg-messages">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Words</div>
+                    <div class="stat-value" id="total-words">0</div>
+                </div>
+            </div>
+            
+            <div class="time-filter">
+                <button class="filter-btn active" onclick="setTimeFilter('all')">All Time</button>
+                <button class="filter-btn" onclick="setTimeFilter('week')">Past Week</button>
+                <button class="filter-btn" onclick="setTimeFilter('month')">Past Month</button>
+                <button class="filter-btn" onclick="setTimeFilter('day')">Today</button>
+            </div>
+            
+            <div class="chart-container">
+                <h3 class="chart-title">Conversations Over Time</h3>
+                <div class="chart-wrapper">
+                    <canvas id="timeChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h3 class="chart-title">Message Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="messageChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h3 class="chart-title">Top Topics (Word Frequency)</h3>
+                <div class="chart-wrapper">
+                    <canvas id="topicsChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="conversations-list">
+                <h3 class="chart-title">Recent Conversations</h3>
+                <div id="conversations-container"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let allData = [];
+        let filteredData = [];
+        let timeFilter = 'all';
+        let charts = {};
+        
+        async function loadData() {
+            try {
+                // Load extracted conversations
+                const response = await fetch('http://localhost:8765/api/analytics');
+                if (!response.ok) throw new Error('Failed to load analytics data');
+                
+                const data = await response.json();
+                allData = data.conversations || [];
+                
+                applyTimeFilter();
+                updateDisplay();
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                document.getElementById('error').style.display = 'none';
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        function setTimeFilter(filter) {
+            timeFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            applyTimeFilter();
+            updateDisplay();
+        }
+        
+        function applyTimeFilter() {
+            const now = new Date();
+            const filters = {
+                'all': () => true,
+                'day': (date) => (now - date) < 24 * 60 * 60 * 1000,
+                'week': (date) => (now - date) < 7 * 24 * 60 * 60 * 1000,
+                'month': (date) => (now - date) < 30 * 24 * 60 * 60 * 1000
+            };
+            
+            filteredData = allData.filter(conv => {
+                const date = new Date(conv.extracted_at || conv.created_at);
+                return filters[timeFilter](date);
+            });
+        }
+        
+        function updateDisplay() {
+            // Calculate statistics
+            const totalConversations = filteredData.length;
+            const totalMessages = filteredData.reduce((sum, conv) => sum + (conv.message_count || 0), 0);
+            const avgMessages = totalConversations > 0 ? Math.round(totalMessages / totalConversations) : 0;
+            
+            // Estimate total words (rough calculation)
+            const totalWords = filteredData.reduce((sum, conv) => {
+                const messages = conv.messages || [];
+                return sum + messages.reduce((msgSum, msg) => {
+                    return msgSum + (msg.content ? msg.content.split(/\s+/).length : 0);
+                }, 0);
+            }, 0);
+            
+            // Update stats
+            document.getElementById('total-conversations').textContent = totalConversations;
+            document.getElementById('total-messages').textContent = totalMessages;
+            document.getElementById('avg-messages').textContent = avgMessages;
+            document.getElementById('total-words').textContent = totalWords.toLocaleString();
+            
+            // Update charts
+            updateTimeChart();
+            updateMessageChart();
+            updateTopicsChart();
+            updateConversationsList();
+        }
+        
+        function updateTimeChart() {
+            const ctx = document.getElementById('timeChart').getContext('2d');
+            
+            // Group conversations by date
+            const dateGroups = {};
+            filteredData.forEach(conv => {
+                const date = new Date(conv.extracted_at || conv.created_at).toLocaleDateString();
+                dateGroups[date] = (dateGroups[date] || 0) + 1;
+            });
+            
+            const labels = Object.keys(dateGroups).sort();
+            const data = labels.map(label => dateGroups[label]);
+            
+            if (charts.timeChart) charts.timeChart.destroy();
+            
+            charts.timeChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Conversations',
+                        data: data,
+                        borderColor: '#007bff',
+                        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateMessageChart() {
+            const ctx = document.getElementById('messageChart').getContext('2d');
+            
+            // Group by message count ranges
+            const ranges = {
+                '1-10': 0,
+                '11-20': 0,
+                '21-50': 0,
+                '51-100': 0,
+                '100+': 0
+            };
+            
+            filteredData.forEach(conv => {
+                const count = conv.message_count || 0;
+                if (count <= 10) ranges['1-10']++;
+                else if (count <= 20) ranges['11-20']++;
+                else if (count <= 50) ranges['21-50']++;
+                else if (count <= 100) ranges['51-100']++;
+                else ranges['100+']++;
+            });
+            
+            if (charts.messageChart) charts.messageChart.destroy();
+            
+            charts.messageChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(ranges),
+                    datasets: [{
+                        label: 'Number of Conversations',
+                        data: Object.values(ranges),
+                        backgroundColor: '#007bff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateTopicsChart() {
+            const ctx = document.getElementById('topicsChart').getContext('2d');
+            
+            // Simple word frequency analysis
+            const stopWords = new Set(['the', 'is', 'at', 'which', 'on', 'a', 'an', 'as', 'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had', 'to', 'of', 'in', 'for', 'with', 'by', 'and', 'or', 'but']);
+            const wordCounts = {};
+            
+            filteredData.forEach(conv => {
+                const title = conv.title || '';
+                const words = title.toLowerCase().split(/\s+/);
+                words.forEach(word => {
+                    word = word.replace(/[^a-z0-9]/g, '');
+                    if (word.length > 3 && !stopWords.has(word)) {
+                        wordCounts[word] = (wordCounts[word] || 0) + 1;
+                    }
+                });
+            });
+            
+            // Get top 10 words
+            const sortedWords = Object.entries(wordCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+            
+            if (charts.topicsChart) charts.topicsChart.destroy();
+            
+            charts.topicsChart = new Chart(ctx, {
+                type: 'horizontalBar',
+                data: {
+                    labels: sortedWords.map(w => w[0]),
+                    datasets: [{
+                        label: 'Frequency',
+                        data: sortedWords.map(w => w[1]),
+                        backgroundColor: '#007bff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateConversationsList() {
+            const container = document.getElementById('conversations-container');
+            
+            // Sort by date and take recent 10
+            const recent = filteredData
+                .sort((a, b) => new Date(b.extracted_at || b.created_at) - new Date(a.extracted_at || a.created_at))
+                .slice(0, 10);
+            
+            container.innerHTML = recent.map(conv => `
+                <div class="conversation-item" onclick="viewConversation('${conv.id}')">
+                    <div class="conversation-title">${conv.title || 'Untitled'}</div>
+                    <div class="conversation-meta">
+                        ${conv.message_count || 0} messages • 
+                        ${new Date(conv.extracted_at || conv.created_at).toLocaleString()}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function viewConversation(id) {
+            // In a real implementation, this could open the conversation details
+            console.log('View conversation:', id);
+        }
+        
+        function refreshData() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('content').style.display = 'none';
+            loadData();
+        }
+        
+        // Load data on page load
+        loadData();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>

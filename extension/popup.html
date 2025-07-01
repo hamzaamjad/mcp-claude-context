@@ -4,13 +4,32 @@
   <meta charset="utf-8">
   <style>
     body {
-      width: 350px;
+      width: 400px;
       padding: 16px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
     }
     h1 {
-      font-size: 18px;
+      font-size: 20px;
       margin: 0 0 16px 0;
+      color: #333;
+    }
+    .section {
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #eee;
+    }
+    .section:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    h2 {
+      font-size: 14px;
+      margin: 0 0 12px 0;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     button {
       background-color: #007bff;
@@ -22,6 +41,7 @@
       font-size: 14px;
       width: 100%;
       margin-bottom: 8px;
+      transition: background-color 0.2s;
     }
     button:hover {
       background-color: #0056b3;
@@ -29,6 +49,18 @@
     button:disabled {
       background-color: #ccc;
       cursor: not-allowed;
+    }
+    button.secondary {
+      background-color: #6c757d;
+    }
+    button.secondary:hover {
+      background-color: #545b62;
+    }
+    button.danger {
+      background-color: #dc3545;
+    }
+    button.danger:hover {
+      background-color: #c82333;
     }
     #status {
       margin-top: 16px;
@@ -52,21 +84,161 @@
       color: #0c5460;
       border: 1px solid #bee5eb;
     }
+    .warning {
+      background-color: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeaa7;
+    }
     #server-status {
       font-size: 12px;
       color: #666;
       margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .status-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .status-indicator.connected {
+      background-color: #28a745;
+    }
+    .status-indicator.disconnected {
+      background-color: #dc3545;
+    }
+    .progress-container {
+      display: none;
+      margin-top: 12px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 20px;
+      background-color: #e9ecef;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background-color: #007bff;
+      transition: width 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 12px;
+    }
+    .progress-text {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+    }
+    .options {
+      margin-top: 12px;
+    }
+    .checkbox-container {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .checkbox-container input {
+      margin-right: 8px;
+    }
+    .checkbox-container label {
+      font-size: 14px;
+      color: #333;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .stat-card {
+      background-color: #f8f9fa;
+      padding: 12px;
+      border-radius: 4px;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #007bff;
+    }
+    .stat-label {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
     }
   </style>
 </head>
 <body>
   <h1>Claude Context Bridge</h1>
   
-  <div id="server-status">Bridge Server: <span id="server-connection">Checking...</span></div>
+  <div id="server-status">
+    <span>
+      <span class="status-indicator" id="server-indicator"></span>
+      Bridge Server: <span id="server-connection">Checking...</span>
+    </span>
+    <button id="refresh-status" style="width: auto; padding: 4px 8px; font-size: 12px; margin: 0;">Refresh</button>
+  </div>
   
-  <button id="extract-current">Extract Current Conversation</button>
-  <button id="extract-all">Extract All Messages</button>
-  <button id="check-status">Check Server Status</button>
+  <div class="section">
+    <h2>Current Conversation</h2>
+    <button id="extract-current">Extract Current Conversation</button>
+    <button id="monitor-current" class="secondary">Start Real-time Monitoring</button>
+  </div>
+  
+  <div class="section">
+    <h2>Bulk Operations</h2>
+    <button id="extract-all">Extract All Conversations</button>
+    
+    <div class="options">
+      <div class="checkbox-container">
+        <input type="checkbox" id="skip-existing" checked>
+        <label for="skip-existing">Skip already extracted conversations</label>
+      </div>
+      <div class="checkbox-container">
+        <input type="checkbox" id="auto-scroll" checked>
+        <label for="auto-scroll">Auto-scroll through conversations</label>
+      </div>
+      <div class="checkbox-container">
+        <input type="number" id="delay-between" value="2" min="1" max="10" style="width: 50px;">
+        <label for="delay-between">Seconds between extractions</label>
+      </div>
+    </div>
+    
+    <div class="progress-container" id="bulk-progress">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill">0%</div>
+      </div>
+      <div class="progress-text" id="progress-text">Ready to start</div>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Statistics</h2>
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-value" id="total-conversations">-</div>
+        <div class="stat-label">Total Conversations</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="extracted-count">-</div>
+        <div class="stat-label">Extracted</div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Management</h2>
+    <button id="check-status" class="secondary">Check Server Status</button>
+    <button id="open-dashboard" class="secondary">Open Analytics Dashboard</button>
+  </div>
   
   <div id="status"></div>
   
