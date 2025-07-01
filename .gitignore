@@ -37,9 +37,34 @@ cookies.json
 
 # Test files
 test_*.py
+test_exports/
+scripts/test_*.py
 
 # Environment
 .env
 
 # Cache
 .pytest_cache/
+__pycache__/
+
+# Database files
+*.db
+data/db/
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Session and authentication
+session_key.txt
+api_key.txt
+*.key
+
+# Deployment files (if sensitive)
+deployment/secrets/
+deployment/*.env

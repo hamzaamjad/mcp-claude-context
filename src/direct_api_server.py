@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""MCP Claude Context Server using direct API access."""
+"""MCP Claude Context Server v0.5.0 - Enhanced with database, search, and export features."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import json
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import csv
 import os
 from pathlib import Path
@@ -23,23 +23,51 @@ from mcp.types import (
     ServerCapabilities,
 )
 
+# Database imports
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+
+# Import our modules
+from src.models.conversation import Base, Conversation, Message, init_database
+from src.exporters import ObsidianExporter, PDFExporter, NotionExporter
+from src.search import UnifiedSearchEngine
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class DirectAPIClaudeContextServer:
-    """MCP server using direct Claude.ai API access."""
+    """MCP server v0.5.0 with enhanced features."""
     
     def __init__(self):
         self.server = Server("claude-context-direct")
         self._setup_handlers()
         self.conversations_cache: Dict[str, Any] = {}
-        self.messages_cache: Dict[str, Any] = {}  # Cache for extracted messages
+        self.messages_cache: Dict[str, Any] = {}
         self.session = requests.Session()
+        
+        # Paths
         self.extracted_messages_dir = Path("/Users/hamzaamjad/mcp-claude-context/extracted_messages")
         self.session_key_file = Path("/Users/hamzaamjad/mcp-claude-context/config/session_key.json")
+        self.db_path = Path("/Users/hamzaamjad/mcp-claude-context/data/db/conversations.db")
+        
+        # Session management
         self.last_session_check = None
         self.session_check_interval = 300  # Check every 5 minutes
+        
+        # Initialize database
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.engine = init_database(str(self.db_path))
+        self.Session = sessionmaker(bind=self.engine)
+        
+        # Initialize search engine
+        self.search_engine = UnifiedSearchEngine(str(self.db_path))
+        
+        # Initialize exporters
+        self.obsidian_exporter = ObsidianExporter()
+        self.pdf_exporter = PDFExporter()
+        self.notion_exporter = None  # Will be initialized if API key is provided
         
     def _setup_handlers(self):
         """Set up MCP handlers for tools and resources."""
@@ -48,6 +76,7 @@ class DirectAPIClaudeContextServer:
         async def list_tools() -> List[Tool]:
             """List available tools for conversation extraction."""
             return [
+                # Existing tools
                 Tool(
                     name="list_conversations",
                     description="List all conversations from Claude.ai",
@@ -68,6 +97,11 @@ class DirectAPIClaudeContextServer:
                                 "minimum": 1,
                                 "maximum": 100,
                                 "default": 50
+                            },
+                            "sync_to_db": {
+                                "type": "boolean",
+                                "description": "Sync conversations to database",
+                                "default": True
                             }
                         },
                         "required": ["session_key", "org_id"]
@@ -119,7 +153,7 @@ class DirectAPIClaudeContextServer:
                 ),
                 Tool(
                     name="export_conversations",
-                    description="Export conversations to JSON or CSV format",
+                    description="Export conversations to various formats",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -133,14 +167,19 @@ class DirectAPIClaudeContextServer:
                             },
                             "format": {
                                 "type": "string",
-                                "description": "Export format (json or csv)",
-                                "enum": ["json", "csv"],
+                                "description": "Export format",
+                                "enum": ["json", "csv", "obsidian", "pdf"],
                                 "default": "json"
                             },
-                            "include_settings": {
+                            "conversation_ids": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Specific conversation IDs to export (optional)"
+                            },
+                            "include_messages": {
                                 "type": "boolean",
-                                "description": "Include conversation settings in export",
-                                "default": false
+                                "description": "Include full message content in export",
+                                "default": False
                             }
                         },
                         "required": ["session_key", "org_id"]
@@ -173,7 +212,7 @@ class DirectAPIClaudeContextServer:
                             "case_sensitive": {
                                 "type": "boolean",
                                 "description": "Whether search should be case sensitive",
-                                "default": false
+                                "default": False
                             },
                             "limit": {
                                 "type": "integer",
@@ -203,6 +242,119 @@ class DirectAPIClaudeContextServer:
                         },
                         "required": ["session_key", "org_id"]
                     }
+                ),
+                # New v0.5.0 tools
+                Tool(
+                    name="export_to_obsidian",
+                    description="Export conversations to Obsidian vault format",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "conversation_ids": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Conversation IDs to export"
+                            },
+                            "vault_path": {
+                                "type": "string",
+                                "description": "Path to Obsidian vault (optional)"
+                            }
+                        },
+                        "required": ["conversation_ids"]
+                    }
+                ),
+                Tool(
+                    name="semantic_search",
+                    description="Search conversations using semantic similarity",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Search query"
+                            },
+                            "search_type": {
+                                "type": "string",
+                                "enum": ["text", "semantic", "hybrid"],
+                                "default": "hybrid",
+                                "description": "Type of search to perform"
+                            },
+                            "top_k": {
+                                "type": "integer",
+                                "default": 10,
+                                "description": "Number of results to return"
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                ),
+                Tool(
+                    name="bulk_operations",
+                    description="Perform bulk operations on conversations",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": ["tag", "export", "delete", "analyze"],
+                                "description": "Operation to perform"
+                            },
+                            "conversation_ids": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Conversation IDs to operate on"
+                            },
+                            "params": {
+                                "type": "object",
+                                "description": "Operation-specific parameters"
+                            }
+                        },
+                        "required": ["operation", "conversation_ids"]
+                    }
+                ),
+                Tool(
+                    name="get_analytics",
+                    description="Get conversation analytics and statistics",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "time_range": {
+                                "type": "string",
+                                "enum": ["day", "week", "month", "year", "all"],
+                                "default": "all",
+                                "description": "Time range for analytics"
+                            }
+                        }
+                    }
+                ),
+                Tool(
+                    name="migrate_to_database",
+                    description="Migrate JSON files to SQLite database",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "verify": {
+                                "type": "boolean",
+                                "default": True,
+                                "description": "Verify migration after completion"
+                            }
+                        }
+                    }
+                ),
+                Tool(
+                    name="rebuild_search_index",
+                    description="Rebuild search indexes for better performance",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "index_type": {
+                                "type": "string",
+                                "enum": ["text", "semantic", "both"],
+                                "default": "both",
+                                "description": "Which indexes to rebuild"
+                            }
+                        }
+                    }
                 )
             ]
         
@@ -210,11 +362,13 @@ class DirectAPIClaudeContextServer:
         async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             """Handle tool execution."""
             try:
+                # Existing tools
                 if name == "list_conversations":
                     result = await self._list_conversations(
                         arguments.get("session_key"),
                         arguments.get("org_id"),
-                        arguments.get("limit", 50)
+                        arguments.get("limit", 50),
+                        arguments.get("sync_to_db", True)
                     )
                 elif name == "get_conversation":
                     result = await self._get_conversation(
@@ -233,7 +387,8 @@ class DirectAPIClaudeContextServer:
                         arguments.get("session_key"),
                         arguments.get("org_id"),
                         arguments.get("format", "json"),
-                        arguments.get("include_settings", False)
+                        arguments.get("conversation_ids"),
+                        arguments.get("include_messages", False)
                     )
                 elif name == "get_conversation_messages":
                     result = await self._get_conversation_messages(
@@ -249,6 +404,36 @@ class DirectAPIClaudeContextServer:
                     result = await self._update_session(
                         arguments.get("session_key"),
                         arguments.get("org_id")
+                    )
+                # New v0.5.0 tools
+                elif name == "export_to_obsidian":
+                    result = await self._export_to_obsidian(
+                        arguments.get("conversation_ids"),
+                        arguments.get("vault_path")
+                    )
+                elif name == "semantic_search":
+                    result = await self._semantic_search(
+                        arguments.get("query"),
+                        arguments.get("search_type", "hybrid"),
+                        arguments.get("top_k", 10)
+                    )
+                elif name == "bulk_operations":
+                    result = await self._bulk_operations(
+                        arguments.get("operation"),
+                        arguments.get("conversation_ids"),
+                        arguments.get("params", {})
+                    )
+                elif name == "get_analytics":
+                    result = await self._get_analytics(
+                        arguments.get("time_range", "all")
+                    )
+                elif name == "migrate_to_database":
+                    result = await self._migrate_to_database(
+                        arguments.get("verify", True)
+                    )
+                elif name == "rebuild_search_index":
+                    result = await self._rebuild_search_index(
+                        arguments.get("index_type", "both")
                     )
                 else:
                     raise ValueError(f"Unknown tool: {name}")
@@ -266,13 +451,21 @@ class DirectAPIClaudeContextServer:
         async def list_resources() -> List[Resource]:
             """List available conversation resources."""
             resources = []
-            for conv_id, conv_data in self.conversations_cache.items():
-                resources.append(Resource(
-                    uri=f"conversation://{conv_id}",
-                    name=conv_data.get("name", f"Conversation {conv_id}"),
-                    description=f"Created: {conv_data.get('created_at', 'unknown')}",
-                    mimeType="application/json"
-                ))
+            
+            # Get conversations from database
+            session = self.Session()
+            try:
+                conversations = session.query(Conversation).limit(100).all()
+                for conv in conversations:
+                    resources.append(Resource(
+                        uri=f"conversation://{conv.id}",
+                        name=conv.title,
+                        description=f"Created: {conv.created_at}",
+                        mimeType="application/json"
+                    ))
+            finally:
+                session.close()
+            
             return resources
         
         @self.server.read_resource()
@@ -285,13 +478,28 @@ class DirectAPIClaudeContextServer:
                 )
                 
             conv_id = uri.replace("conversation://", "")
-            if conv_id not in self.conversations_cache:
-                raise ErrorData(
-                    code=INVALID_PARAMS,
-                    message=f"Conversation {conv_id} not found"
-                )
+            
+            # Get from database
+            session = self.Session()
+            try:
+                conv = session.query(Conversation).filter_by(id=conv_id).first()
+                if not conv:
+                    raise ErrorData(
+                        code=INVALID_PARAMS,
+                        message=f"Conversation {conv_id} not found"
+                    )
                 
-            return json.dumps(self.conversations_cache[conv_id], indent=2)
+                # Get messages
+                messages = session.query(Message).filter_by(
+                    conversation_id=conv_id
+                ).order_by(Message.index).all()
+                
+                result = conv.to_dict()
+                result['messages'] = [msg.to_dict() for msg in messages]
+                
+                return json.dumps(result, indent=2)
+            finally:
+                session.close()
     
     def _get_headers(self, session_key: str) -> Dict[str, str]:
         """Get request headers with authentication."""
@@ -366,7 +574,13 @@ class DirectAPIClaudeContextServer:
         
         return session_key, org_id
     
-    async def _list_conversations(self, session_key: str, org_id: str, limit: int = 50) -> Dict[str, Any]:
+    async def _list_conversations(
+        self,
+        session_key: str,
+        org_id: str,
+        limit: int = 50,
+        sync_to_db: bool = True
+    ) -> Dict[str, Any]:
         """List conversations using direct API."""
         logger.info(f"Listing conversations for org {org_id}")
         
@@ -388,6 +602,10 @@ class DirectAPIClaudeContextServer:
                 for conv in conversations[:limit]:
                     self.conversations_cache[conv['uuid']] = conv
                 
+                # Sync to database if requested
+                if sync_to_db:
+                    await self._sync_conversations_to_db(conversations[:limit])
+                
                 # Format response
                 return {
                     "status": "success",
@@ -398,7 +616,9 @@ class DirectAPIClaudeContextServer:
                             "name": conv.get('name', 'Untitled'),
                             "created_at": conv.get('created_at'),
                             "updated_at": conv.get('updated_at'),
-                            "message_count": conv.get('message_count', 0)
+                            "message_count": conv.get('message_count', 0),
+                            "model": conv.get('model'),
+                            "is_starred": conv.get('is_starred', False)
                         }
                         for conv in conversations[:limit]
                     ]
@@ -417,14 +637,81 @@ class DirectAPIClaudeContextServer:
                 "error": str(e)
             }
     
+    async def _sync_conversations_to_db(self, conversations: List[Dict]) -> None:
+        """Sync conversations to database."""
+        session = self.Session()
+        try:
+            for conv_data in conversations:
+                # Check if conversation exists
+                conv = session.query(Conversation).filter_by(
+                    id=conv_data['uuid']
+                ).first()
+                
+                if conv:
+                    # Update existing
+                    conv.title = conv_data.get('name', 'Untitled')
+                    conv.updated_at = datetime.fromisoformat(
+                        conv_data['updated_at'].replace('Z', '+00:00')
+                    ) if conv_data.get('updated_at') else datetime.now()
+                    conv.model = conv_data.get('model', 'unknown')
+                    conv.message_count = conv_data.get('message_count', 0)
+                else:
+                    # Create new
+                    conv = Conversation(
+                        id=conv_data['uuid'],
+                        title=conv_data.get('name', 'Untitled'),
+                        created_at=datetime.fromisoformat(
+                            conv_data['created_at'].replace('Z', '+00:00')
+                        ) if conv_data.get('created_at') else datetime.now(),
+                        updated_at=datetime.fromisoformat(
+                            conv_data['updated_at'].replace('Z', '+00:00')
+                        ) if conv_data.get('updated_at') else datetime.now(),
+                        model=conv_data.get('model', 'unknown'),
+                        message_count=conv_data.get('message_count', 0),
+                        metadata={
+                            'is_starred': conv_data.get('is_starred', False),
+                            'settings': conv_data.get('settings', {})
+                        }
+                    )
+                    session.add(conv)
+            
+            session.commit()
+            logger.info(f"Synced {len(conversations)} conversations to database")
+        except Exception as e:
+            logger.error(f"Error syncing to database: {e}")
+            session.rollback()
+        finally:
+            session.close()
+    
     async def _get_conversation(self, session_key: str, org_id: str, conversation_id: str) -> Dict[str, Any]:
         """Get a specific conversation."""
         logger.info(f"Getting conversation {conversation_id}")
         
-        # First, check if we have it cached
+        # First, check database
+        session = self.Session()
+        try:
+            conv = session.query(Conversation).filter_by(id=conversation_id).first()
+            if conv:
+                messages = session.query(Message).filter_by(
+                    conversation_id=conversation_id
+                ).order_by(Message.index).all()
+                
+                result = conv.to_dict()
+                result['messages'] = [msg.to_dict() for msg in messages]
+                
+                return {
+                    "status": "success",
+                    "source": "database",
+                    "conversation": result
+                }
+        finally:
+            session.close()
+        
+        # If not in database, check cache
         if conversation_id in self.conversations_cache:
             return {
                 "status": "success",
+                "source": "cache",
                 "conversation": self.conversations_cache[conversation_id]
             }
         
@@ -434,6 +721,7 @@ class DirectAPIClaudeContextServer:
         if conversation_id in self.conversations_cache:
             return {
                 "status": "success",
+                "source": "api",
                 "conversation": self.conversations_cache[conversation_id]
             }
         else:
@@ -446,6 +734,19 @@ class DirectAPIClaudeContextServer:
         """Search conversations by keyword."""
         logger.info(f"Searching conversations for: {query}")
         
+        # Use database search
+        results = self.search_engine.text_search.search_conversations(query, limit=50)
+        
+        if results:
+            return {
+                "status": "success",
+                "source": "database",
+                "query": query,
+                "count": len(results),
+                "results": results
+            }
+        
+        # Fallback to cache search
         # First, ensure we have conversations cached
         if not self.conversations_cache:
             await self._list_conversations(session_key, org_id, limit=100)
@@ -466,20 +767,53 @@ class DirectAPIClaudeContextServer:
         
         return {
             "status": "success",
+            "source": "cache",
             "query": query,
             "count": len(results),
             "results": results
         }
     
-    async def _export_conversations(self, session_key: str, org_id: str, format: str = "json", include_settings: bool = False) -> Dict[str, Any]:
-        """Export conversations to JSON or CSV format."""
+    async def _export_conversations(
+        self,
+        session_key: str,
+        org_id: str,
+        format: str = "json",
+        conversation_ids: Optional[List[str]] = None,
+        include_messages: bool = False
+    ) -> Dict[str, Any]:
+        """Export conversations to various formats."""
         logger.info(f"Exporting conversations in {format} format")
         
-        # Ensure we have conversations
-        if not self.conversations_cache:
-            await self._list_conversations(session_key, org_id, limit=100)
+        # Get conversations to export
+        conversations_to_export = []
         
-        if not self.conversations_cache:
+        if conversation_ids:
+            # Export specific conversations
+            session = self.Session()
+            try:
+                for conv_id in conversation_ids:
+                    conv = session.query(Conversation).filter_by(id=conv_id).first()
+                    if conv:
+                        conv_data = conv.to_dict()
+                        
+                        if include_messages:
+                            messages = session.query(Message).filter_by(
+                                conversation_id=conv_id
+                            ).order_by(Message.index).all()
+                            conv_data['messages'] = [msg.to_dict() for msg in messages]
+                        
+                        conversations_to_export.append(conv_data)
+            finally:
+                session.close()
+        else:
+            # Export all from cache or database
+            if not self.conversations_cache:
+                await self._list_conversations(session_key, org_id, limit=100)
+            
+            for conv_id, conv in self.conversations_cache.items():
+                conversations_to_export.append(conv)
+        
+        if not conversations_to_export:
             return {
                 "status": "error",
                 "error": "No conversations found to export"
@@ -501,24 +835,9 @@ class DirectAPIClaudeContextServer:
                 export_data = {
                     "export_timestamp": datetime.now().isoformat(),
                     "org_id": org_id,
-                    "conversation_count": len(self.conversations_cache),
-                    "conversations": []
+                    "conversation_count": len(conversations_to_export),
+                    "conversations": conversations_to_export
                 }
-                
-                for conv_id, conv in self.conversations_cache.items():
-                    conv_data = {
-                        "id": conv['uuid'],
-                        "name": conv.get('name', 'Untitled'),
-                        "created_at": conv.get('created_at'),
-                        "updated_at": conv.get('updated_at'),
-                        "model": conv.get('model'),
-                        "is_starred": conv.get('is_starred', False)
-                    }
-                    
-                    if include_settings:
-                        conv_data['settings'] = conv.get('settings', {})
-                    
-                    export_data['conversations'].append(conv_data)
                 
                 # Write JSON file
                 with open(filepath, 'w', encoding='utf-8') as f:
@@ -529,23 +848,59 @@ class DirectAPIClaudeContextServer:
                 filepath = exports_dir / filename
                 
                 # Prepare CSV headers
-                headers = ['id', 'name', 'created_at', 'updated_at', 'model', 'is_starred']
+                headers = ['id', 'name', 'created_at', 'updated_at', 'model', 'message_count']
                 
                 # Write CSV file
                 with open(filepath, 'w', newline='', encoding='utf-8') as f:
                     writer = csv.DictWriter(f, fieldnames=headers)
                     writer.writeheader()
                     
-                    for conv_id, conv in self.conversations_cache.items():
+                    for conv in conversations_to_export:
                         row = {
-                            'id': conv['uuid'],
-                            'name': conv.get('name', 'Untitled'),
+                            'id': conv.get('id', conv.get('uuid')),
+                            'name': conv.get('name', conv.get('title', 'Untitled')),
                             'created_at': conv.get('created_at', ''),
                             'updated_at': conv.get('updated_at', ''),
                             'model': conv.get('model', ''),
-                            'is_starred': conv.get('is_starred', False)
+                            'message_count': conv.get('message_count', 0)
                         }
                         writer.writerow(row)
+                        
+            elif format == "obsidian":
+                # Use Obsidian exporter
+                results = []
+                for conv in conversations_to_export:
+                    if include_messages and 'messages' in conv:
+                        filepath = self.obsidian_exporter.export_conversation(
+                            conv, conv['messages']
+                        )
+                        results.append(filepath)
+                
+                return {
+                    "status": "success",
+                    "format": "obsidian",
+                    "exported_count": len(results),
+                    "vault_path": str(self.obsidian_exporter.vault_path),
+                    "files": results
+                }
+                
+            elif format == "pdf":
+                # Use PDF exporter
+                results = []
+                for conv in conversations_to_export:
+                    if include_messages and 'messages' in conv:
+                        filepath = self.pdf_exporter.export_conversation(
+                            conv, conv['messages']
+                        )
+                        results.append(filepath)
+                
+                return {
+                    "status": "success",
+                    "format": "pdf",
+                    "exported_count": len(results),
+                    "output_dir": str(self.pdf_exporter.output_dir),
+                    "files": results
+                }
             
             else:
                 return {
@@ -553,7 +908,7 @@ class DirectAPIClaudeContextServer:
                     "error": f"Unsupported format: {format}"
                 }
             
-            # Get file size
+            # Get file size for json/csv
             file_size = os.path.getsize(filepath)
             
             return {
@@ -561,7 +916,7 @@ class DirectAPIClaudeContextServer:
                 "filename": filename,
                 "filepath": str(filepath),
                 "format": format,
-                "conversation_count": len(self.conversations_cache),
+                "conversation_count": len(conversations_to_export),
                 "file_size_bytes": file_size,
                 "file_size_human": self._format_file_size(file_size),
                 "export_timestamp": timestamp
@@ -586,7 +941,32 @@ class DirectAPIClaudeContextServer:
         """Get full conversation messages from locally extracted data."""
         logger.info(f"Getting messages for conversation {conversation_id}")
         
-        # Check cache first
+        # Check database first
+        session = self.Session()
+        try:
+            messages = session.query(Message).filter_by(
+                conversation_id=conversation_id
+            ).order_by(Message.index).all()
+            
+            if messages:
+                conv = session.query(Conversation).filter_by(id=conversation_id).first()
+                
+                return {
+                    "status": "success",
+                    "source": "database",
+                    "conversation": {
+                        "id": conversation_id,
+                        "title": conv.title if conv else "Untitled",
+                        "created_at": conv.created_at.isoformat() if conv else None,
+                        "updated_at": conv.updated_at.isoformat() if conv else None,
+                        "message_count": len(messages),
+                        "messages": [msg.to_dict() for msg in messages]
+                    }
+                }
+        finally:
+            session.close()
+        
+        # Check cache
         if conversation_id in self.messages_cache:
             logger.info(f"Returning cached messages for {conversation_id}")
             return {
@@ -667,8 +1047,8 @@ class DirectAPIClaudeContextServer:
             }
     
     async def _search_messages(self, query: str, case_sensitive: bool = False, limit: int = 20) -> Dict[str, Any]:
-        """Search through all extracted message content."""
-        logger.info(f"Searching for '{query}' in extracted messages")
+        """Search through message content using database."""
+        logger.info(f"Searching for '{query}' in messages")
         
         if not query:
             return {
@@ -676,6 +1056,22 @@ class DirectAPIClaudeContextServer:
                 "error": "Search query cannot be empty"
             }
         
+        # Use database search
+        try:
+            results = self.search_engine.text_search.search_messages(query, limit=limit)
+            
+            return {
+                "status": "success",
+                "source": "database",
+                "query": query,
+                "case_sensitive": case_sensitive,
+                "total_results": len(results),
+                "results": results
+            }
+        except Exception as e:
+            logger.error(f"Database search failed: {e}")
+        
+        # Fallback to file search
         results = []
         search_query = query if case_sensitive else query.lower()
         
@@ -742,6 +1138,7 @@ class DirectAPIClaudeContextServer:
             
             return {
                 "status": "success",
+                "source": "files",
                 "query": query,
                 "case_sensitive": case_sensitive,
                 "total_results": len(results),
@@ -787,14 +1184,343 @@ class DirectAPIClaudeContextServer:
                 "error": str(e)
             }
     
+    # New v0.5.0 methods
+    
+    async def _export_to_obsidian(
+        self,
+        conversation_ids: List[str],
+        vault_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Export conversations to Obsidian vault format."""
+        logger.info(f"Exporting {len(conversation_ids)} conversations to Obsidian")
+        
+        if vault_path:
+            self.obsidian_exporter = ObsidianExporter(vault_path)
+        
+        results = []
+        failed = []
+        
+        session = self.Session()
+        try:
+            for conv_id in conversation_ids:
+                try:
+                    # Get conversation and messages from database
+                    conv = session.query(Conversation).filter_by(id=conv_id).first()
+                    if not conv:
+                        failed.append({
+                            'conversation_id': conv_id,
+                            'error': 'Conversation not found'
+                        })
+                        continue
+                    
+                    messages = session.query(Message).filter_by(
+                        conversation_id=conv_id
+                    ).order_by(Message.index).all()
+                    
+                    # Export
+                    filepath = self.obsidian_exporter.export_conversation(
+                        conv.to_dict(),
+                        [msg.to_dict() for msg in messages]
+                    )
+                    results.append(filepath)
+                    
+                except Exception as e:
+                    failed.append({
+                        'conversation_id': conv_id,
+                        'error': str(e)
+                    })
+            
+            return {
+                "status": "success",
+                "exported": len(results),
+                "failed": len(failed),
+                "vault_path": str(self.obsidian_exporter.vault_path),
+                "files": results,
+                "errors": failed
+            }
+            
+        finally:
+            session.close()
+    
+    async def _semantic_search(
+        self,
+        query: str,
+        search_type: str = "hybrid",
+        top_k: int = 10
+    ) -> Dict[str, Any]:
+        """Search using semantic similarity."""
+        logger.info(f"Performing {search_type} search for: {query}")
+        
+        results = self.search_engine.search(
+            query=query,
+            search_type=search_type,
+            target='both',
+            limit=top_k
+        )
+        
+        return {
+            "status": "success",
+            "query": query,
+            "search_type": search_type,
+            "results": results
+        }
+    
+    async def _bulk_operations(
+        self,
+        operation: str,
+        conversation_ids: List[str],
+        params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Perform bulk operations on conversations."""
+        logger.info(f"Performing bulk {operation} on {len(conversation_ids)} conversations")
+        
+        results = {
+            "status": "success",
+            "operation": operation,
+            "processed": 0,
+            "failed": 0,
+            "details": []
+        }
+        
+        session = self.Session()
+        try:
+            if operation == "tag":
+                tags = params.get("tags", [])
+                for conv_id in conversation_ids:
+                    try:
+                        conv = session.query(Conversation).filter_by(id=conv_id).first()
+                        if conv:
+                            current_tags = conv.tags or []
+                            conv.tags = list(set(current_tags + tags))
+                            results["processed"] += 1
+                        else:
+                            results["failed"] += 1
+                    except Exception as e:
+                        results["failed"] += 1
+                        results["details"].append({
+                            "id": conv_id,
+                            "error": str(e)
+                        })
+                
+                session.commit()
+                
+            elif operation == "export":
+                format = params.get("format", "json")
+                # Delegate to export method
+                export_result = await self._export_conversations(
+                    "", "", format, conversation_ids, True
+                )
+                return export_result
+                
+            elif operation == "delete":
+                for conv_id in conversation_ids:
+                    try:
+                        # Delete messages first
+                        session.query(Message).filter_by(
+                            conversation_id=conv_id
+                        ).delete()
+                        
+                        # Delete conversation
+                        session.query(Conversation).filter_by(
+                            id=conv_id
+                        ).delete()
+                        
+                        results["processed"] += 1
+                    except Exception as e:
+                        results["failed"] += 1
+                        results["details"].append({
+                            "id": conv_id,
+                            "error": str(e)
+                        })
+                
+                session.commit()
+                
+            elif operation == "analyze":
+                # Analyze conversations
+                total_messages = 0
+                total_chars = 0
+                models = {}
+                
+                for conv_id in conversation_ids:
+                    try:
+                        messages = session.query(Message).filter_by(
+                            conversation_id=conv_id
+                        ).all()
+                        
+                        total_messages += len(messages)
+                        total_chars += sum(len(msg.content) for msg in messages)
+                        
+                        conv = session.query(Conversation).filter_by(id=conv_id).first()
+                        if conv:
+                            model = conv.model or "unknown"
+                            models[model] = models.get(model, 0) + 1
+                        
+                        results["processed"] += 1
+                    except Exception as e:
+                        results["failed"] += 1
+                
+                results["analysis"] = {
+                    "total_messages": total_messages,
+                    "total_characters": total_chars,
+                    "average_messages_per_conversation": total_messages / len(conversation_ids) if conversation_ids else 0,
+                    "models_used": models
+                }
+            
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Unknown operation: {operation}"
+                }
+                
+        except Exception as e:
+            logger.error(f"Bulk operation failed: {e}")
+            results["status"] = "error"
+            results["error"] = str(e)
+        finally:
+            session.close()
+        
+        return results
+    
+    async def _get_analytics(self, time_range: str = "all") -> Dict[str, Any]:
+        """Get conversation analytics."""
+        logger.info(f"Getting analytics for time range: {time_range}")
+        
+        session = self.Session()
+        try:
+            # Calculate date filter
+            now = datetime.now()
+            if time_range == "day":
+                start_date = now - timedelta(days=1)
+            elif time_range == "week":
+                start_date = now - timedelta(weeks=1)
+            elif time_range == "month":
+                start_date = now - timedelta(days=30)
+            elif time_range == "year":
+                start_date = now - timedelta(days=365)
+            else:
+                start_date = None
+            
+            # Build query
+            query = session.query(Conversation)
+            if start_date:
+                query = query.filter(Conversation.created_at >= start_date)
+            
+            conversations = query.all()
+            
+            # Calculate statistics
+            total_conversations = len(conversations)
+            total_messages = sum(conv.message_count for conv in conversations)
+            
+            # Model distribution
+            model_dist = {}
+            for conv in conversations:
+                model = conv.model or "unknown"
+                model_dist[model] = model_dist.get(model, 0) + 1
+            
+            # Time distribution
+            daily_dist = {}
+            for conv in conversations:
+                date_key = conv.created_at.strftime("%Y-%m-%d")
+                daily_dist[date_key] = daily_dist.get(date_key, 0) + 1
+            
+            # Message statistics
+            message_counts = [conv.message_count for conv in conversations]
+            avg_messages = sum(message_counts) / len(message_counts) if message_counts else 0
+            max_messages = max(message_counts) if message_counts else 0
+            min_messages = min(message_counts) if message_counts else 0
+            
+            # Search statistics
+            search_stats = self.search_engine.get_search_stats()
+            
+            return {
+                "status": "success",
+                "time_range": time_range,
+                "statistics": {
+                    "total_conversations": total_conversations,
+                    "total_messages": total_messages,
+                    "average_messages_per_conversation": avg_messages,
+                    "max_messages_in_conversation": max_messages,
+                    "min_messages_in_conversation": min_messages,
+                    "model_distribution": model_dist,
+                    "daily_distribution": daily_dist,
+                    "search_capabilities": search_stats
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting analytics: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+        finally:
+            session.close()
+    
+    async def _migrate_to_database(self, verify: bool = True) -> Dict[str, Any]:
+        """Migrate JSON files to database."""
+        logger.info("Starting migration to database")
+        
+        # Import and run migration
+        from deployment.scripts.migrate_data import DataMigrator
+        
+        try:
+            migrator = DataMigrator(
+                json_dir=str(self.extracted_messages_dir),
+                db_path=str(self.db_path)
+            )
+            
+            migrator.migrate()
+            
+            if verify:
+                migrator.verify_migration()
+            
+            return {
+                "status": "success",
+                "message": "Migration completed successfully"
+            }
+            
+        except Exception as e:
+            logger.error(f"Migration failed: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
+    async def _rebuild_search_index(self, index_type: str = "both") -> Dict[str, Any]:
+        """Rebuild search indexes."""
+        logger.info(f"Rebuilding {index_type} search index")
+        
+        try:
+            if index_type in ["text", "both"]:
+                self.search_engine.text_search.rebuild_search_index()
+                
+            if index_type in ["semantic", "both"]:
+                self.search_engine.semantic_search.build_indexes()
+            
+            # Optimize after rebuild
+            self.search_engine.optimize_indexes()
+            
+            return {
+                "status": "success",
+                "message": f"Search index ({index_type}) rebuilt successfully",
+                "stats": self.search_engine.get_search_stats()
+            }
+            
+        except Exception as e:
+            logger.error(f"Index rebuild failed: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
     async def run(self):
         """Run the MCP server."""
         async with stdio_server() as (read_stream, write_stream):
             initialization_options = InitializationOptions(
                 server_name="claude-context-direct",
-                server_version="0.4.0",
+                server_version="0.5.0",
                 capabilities=ServerCapabilities(),
-                instructions="Direct API MCP server for Claude.ai conversations. Supports API-based conversation listing and local extracted message reading. API tools require session_key and org_id. Message tools work with locally extracted data."
+                instructions="Enhanced MCP server v0.5.0 for Claude.ai conversations. Features include SQLite database storage, semantic search, multiple export formats (Obsidian, PDF), and bulk operations. API tools require session_key and org_id. Message tools work with locally extracted data or database."
             )
             await self.server.run(read_stream, write_stream, initialization_options)
 

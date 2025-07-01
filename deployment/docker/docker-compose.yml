@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  mcp-claude-context:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile
+    container_name: mcp-claude-context
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # MCP Server
+      - "9222:9222"  # Bridge Server
+    volumes:
+      # Persistent data volumes
+      - ./data/extracted_messages:/app/extracted_messages
+      - ./data/db:/app/data/db
+      - ./data/exports:/app/exports
+      # Chrome extension for auto-updates
+      - ../../extension:/app/extension:ro
+    environment:
+      - MCP_DB_PATH=/app/data/db/conversations.db
+      - MCP_EXPORT_DIR=/app/exports
+      - MCP_PORT=8000
+      - BRIDGE_PORT=9222
+      - LOG_LEVEL=INFO
+    networks:
+      - mcp-network
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python -m src.direct_api_server"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Chrome browser for headless operations
+  chrome:
+    image: selenium/standalone-chrome:latest
+    container_name: mcp-chrome
+    restart: unless-stopped
+    ports:
+      - "4444:4444"
+      - "7900:7900"  # VNC for debugging
+    shm_size: 2gb
+    environment:
+      - SE_NODE_MAX_SESSIONS=5
+      - SE_NODE_SESSION_TIMEOUT=86400
+      - SE_VNC_NO_PASSWORD=1
+    networks:
+      - mcp-network
+    depends_on:
+      - mcp-claude-context
+
+networks:
+  mcp-network:
+    driver: bridge
+
+volumes:
+  extracted_messages:
+  db_data:
+  exports:
