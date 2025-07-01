@@ -4,13 +4,19 @@
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
+import sys
 
 from aiohttp import web
 from aiohttp.web import Request, Response, json_response
 import aiohttp_cors
+
+# Add parent directory to path to import rate limiter
+sys.path.append(str(Path(__file__).parent.parent))
+from src.utils.rate_limiter import RateLimiter, RateLimitConfig
 
 # Configure logging
 logging.basicConfig(
@@ -32,8 +38,19 @@ class BridgeServer:
         self.port = port
         self.app = web.Application()
         self.conversations: Dict[str, Any] = {}
+        
+        # Initialize rate limiter with custom config for bridge server
+        rate_config = RateLimitConfig(
+            requests_per_second=3.0,  # 3 requests per second
+            burst_size=10,  # Allow burst of 10 requests
+            retry_after_header_respect=True,
+            max_retries=5
+        )
+        self.rate_limiter = RateLimiter(rate_config)
+        
         self._setup_routes()
         self._setup_cors()
+        self._setup_middleware()
         
     def _setup_routes(self):
         """Set up HTTP routes."""
@@ -43,6 +60,7 @@ class BridgeServer:
         self.app.router.add_get('/api/conversations', self.list_conversations)
         self.app.router.add_get('/api/conversations/{conv_id}', self.check_conversation)
         self.app.router.add_get('/api/analytics', self.get_analytics)
+        self.app.router.add_get('/api/rate-limit-status', self.get_rate_limit_status)
         self.app.router.add_get('/dashboard', self.serve_dashboard)
         self.app.router.add_get('/', self.serve_dashboard)
         
@@ -60,6 +78,66 @@ class BridgeServer:
         # Configure CORS on all routes
         for route in list(self.app.router.routes()):
             cors.add(route)
+    
+    def _setup_middleware(self):
+        """Set up middleware for rate limiting."""
+        
+        @web.middleware
+        async def rate_limit_middleware(request: Request, handler):
+            """Rate limiting middleware for all API requests."""
+            # Skip rate limiting for static assets and dashboard
+            if request.path in ['/', '/dashboard', '/api/rate-limit-status']:
+                return await handler(request)
+            
+            # Extract endpoint identifier
+            endpoint = self._get_endpoint_from_request(request)
+            
+            try:
+                # Acquire rate limit token
+                await self.rate_limiter.acquire(endpoint)
+                
+                # Process request
+                response = await handler(request)
+                
+                # Add rate limit headers
+                bucket = self.rate_limiter._buckets.get(endpoint)
+                if bucket:
+                    response.headers['X-RateLimit-Limit'] = str(self.rate_limiter.config.burst_size)
+                    response.headers['X-RateLimit-Remaining'] = str(int(bucket.tokens))
+                    response.headers['X-RateLimit-Reset'] = str(int(time.time() + 60))
+                
+                return response
+                
+            except asyncio.TimeoutError:
+                logger.warning(f"Rate limit timeout for {endpoint}")
+                return json_response({
+                    'error': 'Rate limit exceeded',
+                    'message': 'Too many requests. Please slow down.'
+                }, status=429, headers={
+                    'Retry-After': '1'
+                })
+            except Exception as e:
+                logger.error(f"Rate limit middleware error: {e}")
+                raise
+        
+        self.app.middlewares.append(rate_limit_middleware)
+    
+    def _get_endpoint_from_request(self, request: Request) -> str:
+        """Extract endpoint identifier from request."""
+        path = request.path
+        method = request.method
+        
+        # Create unique endpoint identifier
+        if '/api/conversations/' in path:
+            return f"{method}:conversation_detail"
+        elif '/api/conversations' in path:
+            return f"{method}:conversations"
+        elif '/api/messages' in path:
+            return f"{method}:messages"
+        elif '/api/conversation' in path:
+            return f"{method}:conversation"
+        
+        return f"{method}:{path}"
     
     async def handle_conversation(self, request: Request) -> Response:
         """Handle conversation metadata from extension."""
@@ -274,6 +352,30 @@ class BridgeServer:
             'status': 'success',
             'conversations': analytics_data,
             'total': len(analytics_data)
+        })
+    
+    async def get_rate_limit_status(self, request: Request) -> Response:
+        """Get current rate limit status for all endpoints."""
+        metrics = self.rate_limiter.get_metrics()
+        
+        # Add current token status for each endpoint
+        status = {}
+        for endpoint, bucket in self.rate_limiter._buckets.items():
+            status[endpoint] = {
+                'tokens_available': bucket.tokens,
+                'capacity': bucket.capacity,
+                'refill_rate': bucket.refill_rate,
+                'metrics': metrics.get(endpoint, {})
+            }
+        
+        return json_response({
+            'status': 'success',
+            'rate_limits': {
+                'requests_per_second': self.rate_limiter.config.requests_per_second,
+                'burst_size': self.rate_limiter.config.burst_size
+            },
+            'endpoints': status,
+            'timestamp': datetime.now().isoformat()
         })
     
     async def serve_dashboard(self, request: Request) -> Response:

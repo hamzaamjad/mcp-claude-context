@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Rate Limiting System**
+  - Token bucket algorithm with configurable limits (default: 3 req/s)
+  - Per-endpoint rate limiting for different API calls
+  - Automatic retry with exponential backoff on 429 errors
+  - Burst capacity support (default: 10 requests)
+  - Real-time metrics tracking
+
+- **Priority Queue System**
+  - Request prioritization (CRITICAL, HIGH, NORMAL, LOW)
+  - Concurrent request management with configurable limits
+  - Fair scheduling based on priority and submission time
+  - Queue depth monitoring and metrics
+
+- **New MCP Tool**
+  - `get_rate_limit_metrics` - Monitor API usage and rate limits
+
+- **Enhanced Reliability**
+  - Prevents API throttling during bulk operations
+  - Graceful handling of rate limit errors
+  - Improved session management with rate-aware requests
+
+### Changed
+- All Claude.ai API calls now use rate-limited session
+- Updated `direct_api_server.py` to integrate rate limiting
+- Added environment variables for rate limit configuration
+
 ## [0.5.0] - 2025-01-02
 
 ### Added

@@ -1,0 +1,92 @@
+{
+  "name": "MCP Claude Context Server",
+  "version": "0.6.0",
+  "description": "Extract and analyze your Claude.ai conversations locally",
+  "author": "Hamza Amjad",
+  "license": "MIT",
+  "icon": "assets/icon.png",
+  
+  "server": {
+    "command": "python",
+    "args": ["-m", "src.direct_api_server"],
+    "env": {
+      "PYTHONPATH": "{install_path}",
+      "MCP_DB_PATH": "{user_data}/conversations.db",
+      "MCP_EXPORT_DIR": "{user_data}/exports"
+    }
+  },
+  
+  "requirements": {
+    "python": ">=3.9",
+    "dependencies": [
+      "mcp",
+      "sqlalchemy",
+      "aiohttp",
+      "sentence-transformers",
+      "faiss-cpu"
+    ]
+  },
+  
+  "chrome_extension": {
+    "included": true,
+    "auto_install": true,
+    "manifest": "extension/manifest.json"
+  },
+  
+  "configuration": {
+    "ui": {
+      "enabled": true,
+      "port": 8001,
+      "auto_open": true
+    },
+    "schema": {
+      "session_key": {
+        "type": "string",
+        "secure": true,
+        "label": "Claude Session Key",
+        "description": "Your session key from Claude.ai (will be stored securely)"
+      },
+      "org_id": {
+        "type": "string",
+        "label": "Organization ID",
+        "description": "Your organization ID from Claude.ai"
+      },
+      "auto_sync": {
+        "type": "boolean",
+        "default": false,
+        "label": "Auto-sync conversations",
+        "description": "Automatically sync new conversations every hour"
+      },
+      "rate_limit": {
+        "type": "object",
+        "label": "Rate Limiting",
+        "properties": {
+          "requests_per_second": {
+            "type": "number",
+            "default": 3,
+            "min": 1,
+            "max": 10
+          },
+          "burst_size": {
+            "type": "number",
+            "default": 10,
+            "min": 5,
+            "max": 50
+          }
+        }
+      }
+    }
+  },
+  
+  "health_check": {
+    "endpoint": "/api/status",
+    "interval": 30,
+    "timeout": 5
+  },
+  
+  "updates": {
+    "check_on_startup": true,
+    "auto_update": true,
+    "channel": "stable"
+  }
+}

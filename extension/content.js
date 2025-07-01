@@ -232,9 +232,45 @@ function extractConversationMetadata() {
   return metadata;
 }
 
-// Send to bridge server with enhanced data
+// Rate limiter implementation (inline since we can't import modules in content scripts)
+class ContentScriptRateLimiter {
+  constructor(requestsPerSecond = 3, burstSize = 10) {
+    this.requestsPerSecond = requestsPerSecond;
+    this.burstSize = burstSize;
+    this.tokens = burstSize;
+    this.lastRefill = Date.now();
+  }
+  
+  async acquire() {
+    while (this.tokens < 1) {
+      await this.refillTokens();
+      if (this.tokens < 1) {
+        // Wait a bit before checking again
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    this.tokens -= 1;
+  }
+  
+  async refillTokens() {
+    const now = Date.now();
+    const elapsed = (now - this.lastRefill) / 1000;
+    const tokensToAdd = elapsed * this.requestsPerSecond;
+    
+    this.tokens = Math.min(this.burstSize, this.tokens + tokensToAdd);
+    this.lastRefill = now;
+  }
+}
+
+// Create rate limiter instance
+const rateLimiter = new ContentScriptRateLimiter(3, 10);
+
+// Send to bridge server with enhanced data and rate limiting
 async function sendToBridgeServer(conversationId, title, messages, metadata) {
   try {
+    // Acquire rate limit token before making requests
+    await rateLimiter.acquire();
+    
     // Send conversation metadata
     const metadataResponse = await fetch('http://localhost:8765/api/conversation', {
       method: 'POST',
@@ -250,8 +286,19 @@ async function sendToBridgeServer(conversationId, title, messages, metadata) {
     });
     
     if (!metadataResponse.ok) {
+      // Handle rate limit response
+      if (metadataResponse.status === 429) {
+        const retryAfter = metadataResponse.headers.get('Retry-After') || '1';
+        console.warn(`[Claude Context Bridge v2] Rate limited, waiting ${retryAfter}s`);
+        await new Promise(resolve => setTimeout(resolve, parseInt(retryAfter) * 1000));
+        // Retry
+        return sendToBridgeServer(conversationId, title, messages, metadata);
+      }
       throw new Error(`Metadata request failed: ${metadataResponse.status}`);
     }
+    
+    // Acquire another token for the messages request
+    await rateLimiter.acquire();
     
     // Send messages
     const messagesResponse = await fetch('http://localhost:8765/api/messages', {
@@ -265,6 +312,32 @@ async function sendToBridgeServer(conversationId, title, messages, metadata) {
     });
     
     if (!messagesResponse.ok) {
+      // Handle rate limit response
+      if (messagesResponse.status === 429) {
+        const retryAfter = messagesResponse.headers.get('Retry-After') || '1';
+        console.warn(`[Claude Context Bridge v2] Rate limited, waiting ${retryAfter}s`);
+        await new Promise(resolve => setTimeout(resolve, parseInt(retryAfter) * 1000));
+        // Only retry the messages part
+        await rateLimiter.acquire();
+        const retryResponse = await fetch('http://localhost:8765/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversation_id: conversationId,
+            title: title,
+            messages: messages
+          })
+        });
+        if (!retryResponse.ok) {
+          throw new Error(`Messages request failed after retry: ${retryResponse.status}`);
+        }
+        const result = await retryResponse.json();
+        return {
+          success: true,
+          messageCount: messages.length,
+          data: { title, conversationId, metadata }
+        };
+      }
       throw new Error(`Messages request failed: ${messagesResponse.status}`);
     }
     

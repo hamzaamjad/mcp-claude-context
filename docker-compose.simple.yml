@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  mcp-claude-context:
+    image: hamzaamjad/mcp-claude-context:latest
+    container_name: mcp-claude-context
+    ports:
+      - "8000:8000"  # MCP Server
+      - "8765:8765"  # Bridge Server
+      - "8001:8001"  # Configuration UI
+    volumes:
+      - ./data:/app/data
+      - ./extracted_messages:/app/extracted_messages
+    environment:
+      # These will be configured via the web UI
+      - CLAUDE_SESSION_KEY=${CLAUDE_SESSION_KEY:-}
+      - CLAUDE_ORG_ID=${CLAUDE_ORG_ID:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"  # Auto-update with Watchtower
+
+  # Optional: Watchtower for auto-updates
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_SCHEDULE=0 0 4 * * *  # Daily at 4 AM
+    profiles:
+      - auto-update
+
+# One-command deployment:
+# docker-compose -f docker-compose.simple.yml up -d
+
+# With auto-updates:
+# docker-compose -f docker-compose.simple.yml --profile auto-update up -d

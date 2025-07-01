@@ -87,7 +87,21 @@ async function processNextConversation() {
   // Check if already extracted
   if (bulkExtractionState.options.skipExisting) {
     try {
+      // Add a small delay to respect rate limits when checking
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
       const response = await fetch(`http://localhost:8765/api/conversations/${conversation.id}`);
+      
+      // Handle rate limit response
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After') || '1';
+        console.log(`Rate limited when checking conversation, waiting ${retryAfter}s`);
+        await new Promise(resolve => setTimeout(resolve, parseInt(retryAfter) * 1000));
+        // Retry processing this conversation
+        setTimeout(processNextConversation, 100);
+        return;
+      }
+      
       if (response.ok) {
         bulkExtractionState.stats.skipped++;
         bulkExtractionState.currentIndex++;
@@ -100,8 +114,8 @@ async function processNextConversation() {
           current: conversation.title
         });
         
-        // Move to next
-        setTimeout(processNextConversation, 500);
+        // Move to next with rate limit aware delay
+        setTimeout(processNextConversation, 300);
         return;
       }
     } catch (error) {

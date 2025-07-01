@@ -32,6 +32,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from src.models.conversation import Base, Conversation, Message, init_database
 from src.exporters import ObsidianExporter, PDFExporter, NotionExporter
 from src.search import UnifiedSearchEngine
+from src.utils.rate_limiter import RateLimiter, RateLimitConfig, RateLimitedSession
+from src.utils.request_queue import RequestQueue, RequestPriority, RequestQueueManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,7 +47,23 @@ class DirectAPIClaudeContextServer:
         self._setup_handlers()
         self.conversations_cache: Dict[str, Any] = {}
         self.messages_cache: Dict[str, Any] = {}
+        
+        # Initialize rate limiting
+        rate_limit_config = RateLimitConfig(
+            requests_per_second=float(os.getenv('RATE_LIMIT_PER_SECOND', '3.0')),
+            burst_size=int(os.getenv('RATE_LIMIT_BURST_SIZE', '10')),
+            retry_after_header_respect=True,
+            backoff_base=2.0,
+            max_retries=5
+        )
+        self.rate_limiter = RateLimiter(rate_limit_config)
+        
+        # Initialize session with rate limiting
         self.session = requests.Session()
+        self.rate_limited_session = RateLimitedSession(self.session, self.rate_limiter)
+        
+        # Initialize request queue manager
+        self.queue_manager = RequestQueueManager(default_max_concurrent=3)
         
         # Paths
         self.extracted_messages_dir = Path("/Users/hamzaamjad/mcp-claude-context/extracted_messages")
@@ -68,6 +86,16 @@ class DirectAPIClaudeContextServer:
         self.obsidian_exporter = ObsidianExporter()
         self.pdf_exporter = PDFExporter()
         self.notion_exporter = None  # Will be initialized if API key is provided
+        
+    async def start(self):
+        """Start the server and its components."""
+        await self.queue_manager.start()
+        logger.info("DirectAPIClaudeContextServer started")
+        
+    async def stop(self):
+        """Stop the server and cleanup."""
+        await self.queue_manager.stop()
+        logger.info("DirectAPIClaudeContextServer stopped")
         
     def _setup_handlers(self):
         """Set up MCP handlers for tools and resources."""
@@ -355,6 +383,19 @@ class DirectAPIClaudeContextServer:
                             }
                         }
                     }
+                ),
+                Tool(
+                    name="get_rate_limit_metrics",
+                    description="Get rate limiting metrics and API usage statistics",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "endpoint": {
+                                "type": "string",
+                                "description": "Specific endpoint to get metrics for (optional)"
+                            }
+                        }
+                    }
                 )
             ]
         
@@ -434,6 +475,10 @@ class DirectAPIClaudeContextServer:
                 elif name == "rebuild_search_index":
                     result = await self._rebuild_search_index(
                         arguments.get("index_type", "both")
+                    )
+                elif name == "get_rate_limit_metrics":
+                    result = await self._get_rate_limit_metrics(
+                        arguments.get("endpoint")
                     )
                 else:
                     raise ValueError(f"Unknown tool: {name}")
@@ -544,8 +589,8 @@ class DirectAPIClaudeContextServer:
             url = f'https://claude.ai/api/organizations/{org_id}/chat_conversations?limit=1'
             headers = self._get_headers(session_key)
             
-            response = await asyncio.to_thread(
-                self.session.get, url, headers=headers, timeout=10
+            response = await self.rate_limited_session.get(
+                url, headers=headers, timeout=10
             )
             
             return response.status_code == 200
@@ -591,8 +636,8 @@ class DirectAPIClaudeContextServer:
         headers = self._get_headers(session_key)
         
         try:
-            response = await asyncio.to_thread(
-                self.session.get, url, headers=headers, timeout=30
+            response = await self.rate_limited_session.get(
+                url, headers=headers, timeout=30
             )
             
             if response.status_code == 200:
@@ -1513,6 +1558,61 @@ class DirectAPIClaudeContextServer:
                 "error": str(e)
             }
     
+    async def _get_rate_limit_metrics(self, endpoint: Optional[str] = None) -> Dict[str, Any]:
+        """Get rate limiting metrics and API usage statistics."""
+        logger.info(f"Getting rate limit metrics for endpoint: {endpoint or 'all'}")
+        
+        try:
+            # Get rate limiter metrics
+            rate_metrics = self.rate_limiter.get_metrics(endpoint)
+            
+            # Get queue metrics
+            queue_metrics = self.queue_manager.get_all_metrics()
+            
+            # Build response
+            result = {
+                "status": "success",
+                "timestamp": datetime.now().isoformat(),
+                "rate_limit_config": {
+                    "requests_per_second": self.rate_limiter.config.requests_per_second,
+                    "burst_size": self.rate_limiter.config.burst_size,
+                    "max_retries": self.rate_limiter.config.max_retries
+                }
+            }
+            
+            if endpoint:
+                # Single endpoint metrics
+                result["endpoint"] = endpoint
+                result["metrics"] = rate_metrics
+                result["queue"] = queue_metrics.get(endpoint, {})
+            else:
+                # All endpoints metrics
+                result["endpoints"] = rate_metrics
+                result["queues"] = queue_metrics
+                
+                # Calculate summary stats
+                total_requests = sum(
+                    m.get("total_requests", 0) 
+                    for m in rate_metrics.values()
+                )
+                result["summary"] = {
+                    "total_requests": total_requests,
+                    "active_endpoints": len(rate_metrics),
+                    "total_queued": sum(
+                        q.get("queue_size", 0) 
+                        for q in queue_metrics.values()
+                    )
+                }
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to get rate limit metrics: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
     async def run(self):
         """Run the MCP server."""
         async with stdio_server() as (read_stream, write_stream):
@@ -1528,7 +1628,11 @@ class DirectAPIClaudeContextServer:
 async def main():
     """Main entry point."""
     server = DirectAPIClaudeContextServer()
-    await server.run()
+    try:
+        await server.start()
+        await server.run()
+    finally:
+        await server.stop()
 
 
 if __name__ == "__main__":

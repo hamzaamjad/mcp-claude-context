@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('monitor-current').addEventListener('click', toggleMonitoring);
   document.getElementById('check-status').addEventListener('click', checkServerStatus);
   document.getElementById('refresh-status').addEventListener('click', checkServerStatus);
+  document.getElementById('check-rate-limits').addEventListener('click', checkRateLimits);
   document.getElementById('open-dashboard').addEventListener('click', openDashboard);
 });
 
@@ -227,6 +228,59 @@ async function toggleMonitoring() {
   } catch (error) {
     showStatus('Error: ' + error.message, 'error');
   }
+}
+
+// Check rate limits
+async function checkRateLimits() {
+  try {
+    const response = await fetch('http://localhost:8765/api/rate-limit-status');
+    if (response.ok) {
+      const data = await response.json();
+      displayRateLimitInfo(data);
+    } else {
+      showStatus('Failed to fetch rate limit status', 'error');
+    }
+  } catch (error) {
+    showStatus('Error checking rate limits: ' + error.message, 'error');
+  }
+}
+
+// Display rate limit information
+function displayRateLimitInfo(data) {
+  const section = document.getElementById('rate-limit-section');
+  const infoDiv = document.getElementById('rate-limit-info');
+  
+  let html = `
+    <div style="margin-bottom: 8px;">
+      <strong>Global Limits:</strong> ${data.rate_limits.requests_per_second} req/s, burst: ${data.rate_limits.burst_size}
+    </div>
+  `;
+  
+  if (Object.keys(data.endpoints).length > 0) {
+    html += '<div style="margin-top: 12px;"><strong>Endpoint Status:</strong></div>';
+    
+    for (const [endpoint, info] of Object.entries(data.endpoints)) {
+      const percentage = Math.round((info.tokens_available / info.capacity) * 100);
+      const barColor = percentage > 50 ? '#28a745' : percentage > 20 ? '#ffc107' : '#dc3545';
+      
+      html += `
+        <div style="margin-top: 8px;">
+          <div style="font-size: 11px; color: #999;">${endpoint}</div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="flex: 1; height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden;">
+              <div style="width: ${percentage}%; height: 100%; background: ${barColor};"></div>
+            </div>
+            <span style="font-size: 11px; min-width: 60px;">${Math.floor(info.tokens_available)}/${info.capacity}</span>
+          </div>
+        </div>
+      `;
+    }
+  } else {
+    html += '<div style="margin-top: 8px; color: #999;">No requests made yet</div>';
+  }
+  
+  infoDiv.innerHTML = html;
+  section.style.display = 'block';
 }
 
 // Open analytics dashboard

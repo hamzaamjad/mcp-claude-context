@@ -68,3 +68,5 @@ api_key.txt
 # Deployment files (if sensitive)
 deployment/secrets/
 deployment/*.env
+
+.mcp.json
