@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Poetry
+poetry.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+
+# Extracted data (contains personal conversations)
+extracted_messages/
+conversations.json
+discovered_endpoints.json
+api_investigation_results.json
+rate_limit_test_results.txt
+
+# Config files with personal data
+claude-desktop-config.json
+fixed-claude-config.json
+
+# Test files
+test_*.py
+
+# Cache
+.pytest_cache/

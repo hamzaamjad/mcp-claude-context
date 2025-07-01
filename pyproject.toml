@@ -1,0 +1,33 @@
+# pyproject.toml
+[tool.poetry]
+name = "mcp-claude-context"
+version = "0.2.0"
+description = "MCP server for Claude conversation extraction"
+authors = ["Hamza Azhar Amjad"]
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+mcp = "^1.0.0"
+playwright = "^1.40.0"
+beautifulsoup4 = "^4.12.0"
+aiohttp = "^3.9.0"
+pydantic = "^2.5.0"
+watchdog = "^3.0.0"
+requests = "^2.32.4"
+brotli = "^1.1.0"
+pandas = "^2.0.0"
+aiohttp-cors = "^0.8.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-asyncio = "^0.21.0"
+black = "^23.0.0"
+ruff = "^0.1.0"
+
+[tool.poetry.scripts]
+mcp-claude-context = "src.direct_api_server:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
