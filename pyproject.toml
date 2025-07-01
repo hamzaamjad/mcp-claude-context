@@ -5,6 +5,17 @@ version = "0.5.0"
 description = "MCP server for Claude conversation extraction with enhanced export and search"
 authors = ["Hamza Azhar Amjad"]
 packages = [{include = "src"}]
+homepage = "https://github.com/hamzaamjad/mcp-claude-context"
+repository = "https://github.com/hamzaamjad/mcp-claude-context"
+documentation = "https://github.com/hamzaamjad/mcp-claude-context/tree/main/docs"
+keywords = ["mcp", "claude", "anthropic", "conversation", "export"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"

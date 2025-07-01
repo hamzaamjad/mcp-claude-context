@@ -45,33 +45,50 @@ A powerful Model Context Protocol (MCP) server for extracting, storing, searchin
 
 ## 🛠️ Installation
 
-### Quick Start with Docker (Recommended)
+### Quick Start with uvx (Recommended - No Installation!)
+
+Add to your Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "claude-context": {
+      "command": "uvx",
+      "args": ["mcp-claude-context"],
+      "env": {
+        "CLAUDE_SESSION_KEY": "sk-ant-sid01-...",
+        "CLAUDE_ORG_ID": "28a16e5b-..."
+      }
+    }
+  }
+}
+```
+
+That's it! No installation needed. [See full uvx guide →](docs/UVX_DEPLOYMENT.md)
+
+### Quick Start with Docker
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/mcp-claude-context.git
-cd mcp-claude-context
+# Using pre-built image
+docker run -d \
+  --name mcp-claude-context \
+  -p 8000:8000 \
+  -v $(pwd)/data:/app/data \
+  hamzaamjad/mcp-claude-context:latest
 
-# Start with Docker
-cd deployment/docker
-docker-compose up -d
-
-# The server is now running at http://localhost:8000
+# Or with docker-compose
+curl -O https://raw.githubusercontent.com/hamzaamjad/mcp-claude-context/main/docker-compose.simple.yml
+docker-compose -f docker-compose.simple.yml up -d
 ```
 
 ### One-Click Installer
 
-#### Mac/Linux:
 ```bash
-cd deployment/installer
-chmod +x install.sh
-./install.sh
-```
+# Mac/Linux
+curl -sSL https://raw.githubusercontent.com/hamzaamjad/mcp-claude-context/main/deployment/one-click-install.sh | bash
 
-#### Windows:
-```powershell
-cd deployment\installer
-.\install.ps1
+# Windows (PowerShell)
+iwr -useb https://raw.githubusercontent.com/hamzaamjad/mcp-claude-context/main/deployment/install.ps1 | iex
 ```
 
 ### Manual Installation
