@@ -1,5 +1,9 @@
 # MCP Claude Context Server v0.5.0
 
+[![PyPI version](https://badge.fury.io/py/mcp-claude-context.svg)](https://badge.fury.io/py/mcp-claude-context)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A powerful Model Context Protocol (MCP) server for extracting, storing, searching, and analyzing Claude.ai conversations with enhanced database storage, semantic search, and multiple export formats.
 
 ## 🚀 What's New in v0.5.0
