@@ -4,6 +4,8 @@ name = "mcp-claude-context"
 version = "0.5.0"
 description = "MCP server for Claude conversation extraction with enhanced export and search"
 authors = ["Hamza Azhar Amjad"]
+license = "MIT"
+readme = "README.md"
 packages = [{include = "src"}]
 homepage = "https://github.com/hamzaamjad/mcp-claude-context"
 repository = "https://github.com/hamzaamjad/mcp-claude-context"
@@ -12,9 +14,11 @@ keywords = ["mcp", "claude", "anthropic", "conversation", "export"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
 [tool.poetry.dependencies]
@@ -56,6 +60,10 @@ psutil = "^7.0.0"
 [tool.poetry.scripts]
 mcp-claude-context = "src.direct_api_server:main"
 migrate-data = "deployment.scripts.migrate_data:main"
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/hamzaamjad/mcp-claude-context/issues"
+"Changelog" = "https://github.com/hamzaamjad/mcp-claude-context/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["poetry-core"]
