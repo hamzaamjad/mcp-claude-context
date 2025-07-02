@@ -16,10 +16,11 @@ class UnifiedSearchEngine:
     def __init__(
         self,
         db_path: str = "data/db/conversations.db",
-        semantic_model: str = 'all-MiniLM-L6-v2'
+        semantic_model: str = 'all-MiniLM-L6-v2',
+        index_path: Optional[str] = None
     ):
         self.text_search = TextSearch(db_path)
-        self.semantic_search = SemanticSearch(semantic_model, db_path=db_path)
+        self.semantic_search = SemanticSearch(semantic_model, index_path=index_path, db_path=db_path)
         self.db_path = db_path
     
     def search(

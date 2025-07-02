@@ -65,10 +65,13 @@ class DirectAPIClaudeContextServer:
         # Initialize request queue manager
         self.queue_manager = RequestQueueManager(default_max_concurrent=3)
         
-        # Paths
-        self.extracted_messages_dir = Path("/Users/hamzaamjad/mcp-claude-context/extracted_messages")
-        self.session_key_file = Path("/Users/hamzaamjad/mcp-claude-context/config/session_key.json")
-        self.db_path = Path("/Users/hamzaamjad/mcp-claude-context/data/db/conversations.db")
+        # Paths - use environment variables or user directories for uvx compatibility
+        base_dir = Path(os.getenv('MCP_DATA_DIR', Path.home() / '.mcp-claude-context'))
+        base_dir.mkdir(parents=True, exist_ok=True)
+        
+        self.extracted_messages_dir = base_dir / "extracted_messages"
+        self.session_key_file = base_dir / "config" / "session_key.json"
+        self.db_path = Path(os.getenv('MCP_DB_PATH', str(base_dir / "data" / "db" / "conversations.db")))
         
         # Session management
         self.last_session_check = None
@@ -79,8 +82,9 @@ class DirectAPIClaudeContextServer:
         self.engine = init_database(str(self.db_path))
         self.Session = sessionmaker(bind=self.engine)
         
-        # Initialize search engine
-        self.search_engine = UnifiedSearchEngine(str(self.db_path))
+        # Initialize search engine with proper index path
+        index_path = base_dir / "search_index"
+        self.search_engine = UnifiedSearchEngine(str(self.db_path), index_path=str(index_path))
         
         # Initialize exporters
         self.obsidian_exporter = ObsidianExporter()
