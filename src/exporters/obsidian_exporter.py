@@ -15,18 +15,23 @@ class ObsidianExporter:
     
     def __init__(self, vault_path: Optional[str] = None):
         self.vault_path = Path(vault_path) if vault_path else Path("exports/obsidian")
-        self.vault_path.mkdir(parents=True, exist_ok=True)
         
-        # Create subdirectories
+        # Define subdirectories but don't create them until needed
         self.conversations_dir = self.vault_path / "Conversations"
         self.daily_dir = self.vault_path / "Daily Notes"
         self.tags_dir = self.vault_path / "Tags"
-        
+    
+    def _ensure_directories(self):
+        """Create vault directories if they don't exist"""
+        self.vault_path.mkdir(parents=True, exist_ok=True)
         for dir_path in [self.conversations_dir, self.daily_dir, self.tags_dir]:
             dir_path.mkdir(exist_ok=True)
     
     def export_conversation(self, conversation: Dict, messages: List[Dict]) -> str:
         """Export a single conversation to Obsidian markdown"""
+        
+        # Ensure directories exist
+        self._ensure_directories()
         
         # Generate filename
         created_date = self._parse_datetime(conversation.get('created_at'))
@@ -267,6 +272,9 @@ class ObsidianExporter:
     
     def _update_daily_note(self, date: datetime, conversation: Dict, filename: str):
         """Update or create daily note with conversation link"""
+        # Ensure directories exist
+        self._ensure_directories()
+        
         daily_note_path = self.daily_dir / f"{date.strftime('%Y-%m-%d')}.md"
         
         # Read existing content or create new
