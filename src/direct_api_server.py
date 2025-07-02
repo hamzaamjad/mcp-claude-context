@@ -1635,5 +1635,10 @@ async def main():
         await server.stop()
 
 
-if __name__ == "__main__":
+def cli_main():
+    """CLI entry point for Poetry scripts."""
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    cli_main()

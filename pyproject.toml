@@ -1,7 +1,7 @@
 # pyproject.toml
 [tool.poetry]
 name = "mcp-claude-context"
-version = "0.5.1"
+version = "0.5.2"
 description = "MCP server for Claude conversation extraction with enhanced export and search"
 authors = ["Hamza Azhar Amjad"]
 license = "MIT"
@@ -58,7 +58,7 @@ ruff = "^0.1.0"
 psutil = "^7.0.0"
 
 [tool.poetry.scripts]
-mcp-claude-context = "src.direct_api_server:main"
+mcp-claude-context = "src.direct_api_server:cli_main"
 migrate-data = "deployment.scripts.migrate_data:main"
 
 [tool.poetry.urls]
